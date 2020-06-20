@@ -22,6 +22,7 @@ namespace vkBasalt
     public:
         AistEffect(LogicalDevice*       pLogicalDevice,
                    VkFormat             format,
+                   VkExtent2D           imageExtent,
                    std::vector<VkImage> inputImages,
                    std::vector<VkImage> outputImages,
                    Config*              pConfig);
@@ -30,6 +31,7 @@ namespace vkBasalt
 
     protected:
         LogicalDevice*               pLogicalDevice;
+        VkExtent2D                   imageExtent;
         std::vector<VkImage>         inputImages;
         std::vector<VkImage>         outputImages;
         std::vector<VkImageView>     inputImageViews;

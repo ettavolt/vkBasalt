@@ -1,9 +1,9 @@
+#include <CLucene.h>
 #include "effect_aist.hpp"
 
 #include "command_buffer.hpp"
 #include "image_view.hpp"
 #include "descriptor_set.hpp"
-#include "graphics_pipeline.hpp"
 #include "shader.hpp"
 #include "util.hpp"
 
@@ -12,15 +12,17 @@
 namespace vkBasalt
 {
     AistEffect::AistEffect(LogicalDevice*       pLogicalDevice,
-                            VkFormat             format,
-                            std::vector<VkImage> inputImages,
-                            std::vector<VkImage> outputImages,
-                            Config*              pConfig)
+                           VkFormat             format,
+                           VkExtent2D           imageExtent,
+                           std::vector<VkImage> inputImages,
+                           std::vector<VkImage> outputImages,
+                           Config*              pConfig)
     {
         Logger::debug("in creating AistEffect");
 
         this->pLogicalDevice = pLogicalDevice;
         this->format         = format;
+        this->imageExtent    = imageExtent;
         this->inputImages    = inputImages;
         this->outputImages   = outputImages;
         this->pConfig        = pConfig;
@@ -34,10 +36,26 @@ namespace vkBasalt
 
         createLayoutAndDescriptorSets();
 
-        pipelineLayout = createGraphicsPipelineLayout(
-                pLogicalDevice,
-                std::vector<VkDescriptorSetLayout>({descriptorSetLayout})
+        VkPushConstantRange pushConstantRange;
+        pushConstantRange.size = sizeof(VkExtent2D);
+        pushConstantRange.offset = 0;
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
+        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutCreateInfo.pNext = nullptr;
+        pipelineLayoutCreateInfo.flags = 0;
+        pipelineLayoutCreateInfo.setLayoutCount = 1;
+        pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
+        pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+        pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+
+        VkResult result = pLogicalDevice->vkd.CreatePipelineLayout(
+                pLogicalDevice->device,
+                &pipelineLayoutCreateInfo,
+                nullptr,
+                &pipelineLayout
         );
+        ASSERT_VULKAN(result)
 
         createShaderModule(pLogicalDevice, computeCode, &computeModule);
         VkPipelineShaderStageCreateInfo shaderStageCreateInfo;
@@ -57,7 +75,7 @@ namespace vkBasalt
         computePipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
         computePipelineCreateInfo.basePipelineIndex = -1;
 
-        VkResult result = pLogicalDevice->vkd.CreateComputePipelines(
+        result = pLogicalDevice->vkd.CreateComputePipelines(
                 pLogicalDevice->device,
                 VK_NULL_HANDLE,
                 1,
@@ -95,9 +113,9 @@ namespace vkBasalt
         memoryBarrier.subresourceRange.levelCount     = 1;
         memoryBarrier.subresourceRange.baseArrayLayer = 0;
         memoryBarrier.subresourceRange.layerCount     = 1;
-        for (uint32_t i = 0; i < outputImages.size(); i++)
+        for (auto & outputImage : outputImages)
         {
-            memoryBarrier.image = outputImages[i];
+            memoryBarrier.image = outputImage;
             pLogicalDevice->vkd.CmdPipelineBarrier(
                     layoutCommandBuffer,
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
@@ -198,7 +216,7 @@ namespace vkBasalt
         descriptorSetAllocateInfo.pSetLayouts        = layouts.data();
         Logger::debug("before allocating descriptor Sets");
         result = pLogicalDevice->vkd.AllocateDescriptorSets(pLogicalDevice->device, &descriptorSetAllocateInfo, imageDescriptorSets.data());
-        ASSERT_VULKAN(result);
+        ASSERT_VULKAN(result)
         Logger::debug("after allocating descriptor Sets");
 
         for (unsigned int i = 0; i < imageCount; i++)
@@ -264,6 +282,15 @@ namespace vkBasalt
             pipelineLayout, 0,
             1, &(imageDescriptorSets[imageIndex]),
             0, nullptr
+        );
+        Logger::debug("after binding image storage");
+
+        pLogicalDevice->vkd.CmdPushConstants(
+            commandBuffer,
+            pipelineLayout,
+            VK_SHADER_STAGE_COMPUTE_BIT, 0,
+            sizeof(VkExtent2D),
+            &imageExtent
         );
         Logger::debug("after binding image storage");
 

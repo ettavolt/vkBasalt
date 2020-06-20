@@ -495,7 +495,7 @@ namespace vkBasalt
             else if (effectStrings[i] == std::string("aist"))
             {
                 pLogicalSwapchain->effects.push_back(std::shared_ptr<Effect>(
-                    new AistEffect(pLogicalDevice, unormFormat, firstImages, secondImages, pConfig.get())));
+                    new AistEffect(pLogicalDevice, unormFormat, pLogicalSwapchain->imageExtent, firstImages, secondImages, pConfig.get())));
                 Logger::debug("created AistEffect");
             }
             else

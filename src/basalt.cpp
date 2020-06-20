@@ -358,7 +358,8 @@ namespace vkBasalt
         if (pLogicalDevice->supportsMutableFormat)
         {
             modifiedCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                                            | VK_IMAGE_USAGE_SAMPLED_BIT; // we want to use the swapchain images as output of the graphics pipeline
+                                            | VK_IMAGE_USAGE_SAMPLED_BIT  // we want to use the swapchain images as output of the graphics pipeline
+                                            | VK_IMAGE_USAGE_STORAGE_BIT;  // and AIST wants to access in compute shader
             modifiedCreateInfo.flags |= VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR;
             // TODO what if the application already uses multiple formats for the swapchain?
 
@@ -495,7 +496,7 @@ namespace vkBasalt
             {
                 pLogicalSwapchain->effects.push_back(std::shared_ptr<Effect>(
                     new AistEffect(pLogicalDevice, unormFormat, firstImages, secondImages, pConfig.get())));
-                Logger::debug("created DlsEffect");
+                Logger::debug("created AistEffect");
             }
             else
             {

@@ -43,9 +43,9 @@ namespace vkBasalt
         VkFormat                     format;
         Config*                      pConfig;
         std::vector<uint32_t>        computeCode;
-        VkSpecializationInfo*        pComputeSpecInfo;
 
     private:
+        void relayoutOutputImages();
         void createLayoutAndDescriptorSets();
     };
 } // namespace vkBasalt

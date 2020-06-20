@@ -17,7 +17,6 @@ void main()
             ivec2 pos = ivec2(x, y);
             vec4 src = imageLoad(inImage, pos);
             src.rgb = 1.0 - src.rgb;
-            //vec4 res = vec4(1.0 - src.rgb, src.a);
             imageStore(outImage, pos, src);
         }
     }

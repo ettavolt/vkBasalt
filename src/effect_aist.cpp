@@ -85,6 +85,8 @@ namespace vkBasalt
         memoryBarrier.srcAccessMask       = 0;
         memoryBarrier.dstAccessMask       = 0;
         memoryBarrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+        // We put a barrier to transfer from PRESENT to GENERAL before compute shader
+        // and then from GENERAL to PRESENT for present|transfer after shader.
         memoryBarrier.newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         memoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -219,37 +221,38 @@ namespace vkBasalt
     void AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer)
     {
         Logger::debug("applying AistEffect to cb " + convertToString(commandBuffer));
-        // Need to wait for previous effect and also convert layout…
-        VkImageMemoryBarrier inputBeforeShaderBarrier;
-        inputBeforeShaderBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        inputBeforeShaderBarrier.pNext               = nullptr;
-        inputBeforeShaderBarrier.srcAccessMask       = VK_ACCESS_MEMORY_WRITE_BIT;
-        inputBeforeShaderBarrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
-        inputBeforeShaderBarrier.oldLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        inputBeforeShaderBarrier.newLayout           = VK_IMAGE_LAYOUT_GENERAL;
-        inputBeforeShaderBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        inputBeforeShaderBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        inputBeforeShaderBarrier.image               = inputImages[imageIndex];
-        inputBeforeShaderBarrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-        inputBeforeShaderBarrier.subresourceRange.baseMipLevel   = 0;
-        inputBeforeShaderBarrier.subresourceRange.levelCount     = 1;
-        inputBeforeShaderBarrier.subresourceRange.baseArrayLayer = 0;
-        inputBeforeShaderBarrier.subresourceRange.layerCount     = 1;
-
-        // …and convert layout of output image as it is unmodified after previous execution of this (same!) buffer.
-        VkImageMemoryBarrier outputBeforeShaderBarrier;
-        outputBeforeShaderBarrier = inputBeforeShaderBarrier;
-        outputBeforeShaderBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        outputBeforeShaderBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        outputBeforeShaderBarrier.image = outputImages[imageIndex];
-
         // After shader has run modify layout of output image again to support present|transfer.
         VkImageMemoryBarrier outputAfterShaderBarrier;
-        outputAfterShaderBarrier = outputBeforeShaderBarrier;
+        outputAfterShaderBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        outputAfterShaderBarrier.pNext               = nullptr;
         outputAfterShaderBarrier.srcAccessMask       = VK_ACCESS_SHADER_WRITE_BIT;
         outputAfterShaderBarrier.dstAccessMask       = VK_ACCESS_MEMORY_READ_BIT;
         outputAfterShaderBarrier.oldLayout           = VK_IMAGE_LAYOUT_GENERAL;
         outputAfterShaderBarrier.newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        outputAfterShaderBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        outputAfterShaderBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        outputAfterShaderBarrier.image               = inputImages[imageIndex];
+        outputAfterShaderBarrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+        outputAfterShaderBarrier.subresourceRange.baseMipLevel   = 0;
+        outputAfterShaderBarrier.subresourceRange.levelCount     = 1;
+        outputAfterShaderBarrier.subresourceRange.baseArrayLayer = 0;
+        outputAfterShaderBarrier.subresourceRange.layerCount     = 1;
+
+        std::vector<VkImageMemoryBarrier> beforeShaderBarriers(2, outputAfterShaderBarrier);
+
+        // Need to wait for previous effect and also convert layout…
+        beforeShaderBarriers[0].srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+        beforeShaderBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        beforeShaderBarriers[0].oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        beforeShaderBarriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+        // …and convert layout of output image as it is unmodified after previous execution of this (same!) buffer.
+        beforeShaderBarriers[1].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        beforeShaderBarriers[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        beforeShaderBarriers[1].oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        beforeShaderBarriers[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        beforeShaderBarriers[1].image = outputImages[imageIndex];
+
 
         pLogicalDevice->vkd.CmdPipelineBarrier(
             commandBuffer,
@@ -258,16 +261,7 @@ namespace vkBasalt
             0,
             0, nullptr,
             0, nullptr,
-            1, &inputBeforeShaderBarrier
-        );
-        pLogicalDevice->vkd.CmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &outputBeforeShaderBarrier
+            beforeShaderBarriers.size(), beforeShaderBarriers.data()
         );
         Logger::debug("after the input pipeline barriers");
 

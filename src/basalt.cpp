@@ -30,6 +30,7 @@
 #include "logger.hpp"
 
 #include "effect.hpp"
+#include "effect_aist.hpp"
 #include "effect_fxaa.hpp"
 #include "effect_cas.hpp"
 #include "effect_dls.hpp"
@@ -488,6 +489,12 @@ namespace vkBasalt
             {
                 pLogicalSwapchain->effects.push_back(std::shared_ptr<Effect>(
                     new DlsEffect(pLogicalDevice, unormFormat, pLogicalSwapchain->imageExtent, firstImages, secondImages, pConfig.get())));
+                Logger::debug("created DlsEffect");
+            }
+            else if (effectStrings[i] == std::string("aist"))
+            {
+                pLogicalSwapchain->effects.push_back(std::shared_ptr<Effect>(
+                    new AistEffect(pLogicalDevice, unormFormat, firstImages, secondImages, pConfig.get())));
                 Logger::debug("created DlsEffect");
             }
             else

@@ -4,13 +4,14 @@
 #include "command_buffer.hpp"
 #include "image_view.hpp"
 #include "descriptor_set.hpp"
-#include "shader.hpp"
 #include "util.hpp"
-
-#include "shader_sources.hpp"
 
 namespace vkBasalt
 {
+    const uint32_t AistEffect::computeCode[] = {
+#include "aist.comp.h"
+    };
+
     AistEffect::AistEffect(LogicalDevice*       pLogicalDevice,
                            VkFormat             format,
                            VkExtent2D           imageExtent,
@@ -26,7 +27,6 @@ namespace vkBasalt
         this->inputImages    = inputImages;
         this->outputImages   = outputImages;
         this->pConfig        = pConfig;
-        computeCode = aist_comp;
 
         inputImageViews = createImageViews(pLogicalDevice, format, inputImages);
         Logger::debug("created input ImageViews");
@@ -57,7 +57,14 @@ namespace vkBasalt
         );
         ASSERT_VULKAN(result)
 
-        createShaderModule(pLogicalDevice, computeCode, &computeModule);
+        VkShaderModuleCreateInfo shaderCreateInfo;
+        shaderCreateInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        shaderCreateInfo.pNext    = nullptr;
+        shaderCreateInfo.flags    = 0;
+        shaderCreateInfo.codeSize = sizeof(computeCode);
+        shaderCreateInfo.pCode    = computeCode;
+        result = pLogicalDevice->vkd.CreateShaderModule(pLogicalDevice->device, &shaderCreateInfo, nullptr, &computeModule);
+        ASSERT_VULKAN(result);
         VkPipelineShaderStageCreateInfo shaderStageCreateInfo;
         shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shaderStageCreateInfo.pNext = nullptr;
@@ -160,7 +167,8 @@ namespace vkBasalt
         std::vector<VkWriteDescriptorSet> writeDescriptorSets(bindings.size());
         for (uint32_t i = 0; i < 2; i++) {
             VkDescriptorSetLayoutBinding descriptorSetLayoutBinding;
-            descriptorSetLayoutBinding.binding = i;
+            uint32_t bindingIndex = 2 + i;
+            descriptorSetLayoutBinding.binding = bindingIndex;
             descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
             descriptorSetLayoutBinding.descriptorCount = 1;
             descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -175,7 +183,7 @@ namespace vkBasalt
             writeDescriptorSet.sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writeDescriptorSet.pNext            = nullptr;
             writeDescriptorSet.dstSet           = VK_NULL_HANDLE;
-            writeDescriptorSet.dstBinding       = i;
+            writeDescriptorSet.dstBinding       = bindingIndex;
             writeDescriptorSet.dstArrayElement  = 0;
             writeDescriptorSet.descriptorCount  = 1;
             writeDescriptorSet.descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;

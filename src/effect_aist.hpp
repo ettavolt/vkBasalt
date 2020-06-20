@@ -44,7 +44,7 @@ namespace vkBasalt
         VkPipeline                   computePipeline;
         VkFormat                     format;
         Config*                      pConfig;
-        std::vector<uint32_t>        computeCode;
+        const static uint32_t        computeCode[];
 
     private:
         void relayoutOutputImages();

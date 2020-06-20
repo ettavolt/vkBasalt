@@ -5,10 +5,6 @@
 
 namespace vkBasalt
 {
-    const std::vector<uint32_t> aist_comp = {
-#include "aist.comp.h"
-    };
-
     const std::vector<uint32_t> cas_frag = {
 #include "cas.frag.h"
     };

@@ -49,6 +49,7 @@ namespace vkBasalt
     private:
         void relayoutOutputImages();
         void createLayoutAndDescriptorSets();
+        void createPipeline();
     };
 } // namespace vkBasalt
 

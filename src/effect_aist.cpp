@@ -36,61 +36,7 @@ namespace vkBasalt
 
         createLayoutAndDescriptorSets();
 
-        VkPushConstantRange pushConstantRange;
-        pushConstantRange.size = sizeof(VkExtent2D);
-        pushConstantRange.offset = 0;
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
-        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutCreateInfo.pNext = nullptr;
-        pipelineLayoutCreateInfo.flags = 0;
-        pipelineLayoutCreateInfo.setLayoutCount = 1;
-        pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
-        pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-        pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
-
-        VkResult result = pLogicalDevice->vkd.CreatePipelineLayout(
-                pLogicalDevice->device,
-                &pipelineLayoutCreateInfo,
-                nullptr,
-                &pipelineLayout
-        );
-        ASSERT_VULKAN(result)
-
-        VkShaderModuleCreateInfo shaderCreateInfo;
-        shaderCreateInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        shaderCreateInfo.pNext    = nullptr;
-        shaderCreateInfo.flags    = 0;
-        shaderCreateInfo.codeSize = sizeof(computeCode);
-        shaderCreateInfo.pCode    = computeCode;
-        result = pLogicalDevice->vkd.CreateShaderModule(pLogicalDevice->device, &shaderCreateInfo, nullptr, &computeModule);
-        ASSERT_VULKAN(result);
-        VkPipelineShaderStageCreateInfo shaderStageCreateInfo;
-        shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStageCreateInfo.pNext = nullptr;
-        shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        shaderStageCreateInfo.module = computeModule;
-        shaderStageCreateInfo.pName = "main";
-        shaderStageCreateInfo.pSpecializationInfo = nullptr;
-
-        VkComputePipelineCreateInfo computePipelineCreateInfo;
-        computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        computePipelineCreateInfo.pNext = nullptr;
-        computePipelineCreateInfo.flags = 0;
-        computePipelineCreateInfo.layout = pipelineLayout;
-        computePipelineCreateInfo.stage = shaderStageCreateInfo;
-        computePipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-        computePipelineCreateInfo.basePipelineIndex = -1;
-
-        result = pLogicalDevice->vkd.CreateComputePipelines(
-                pLogicalDevice->device,
-                VK_NULL_HANDLE,
-                1,
-                &computePipelineCreateInfo,
-                nullptr,
-                &computePipeline
-        );
-        ASSERT_VULKAN(result)
+        createPipeline();
     }
 
     void AistEffect::relayoutOutputImages()
@@ -120,16 +66,16 @@ namespace vkBasalt
         memoryBarrier.subresourceRange.levelCount     = 1;
         memoryBarrier.subresourceRange.baseArrayLayer = 0;
         memoryBarrier.subresourceRange.layerCount     = 1;
-        for (auto & outputImage : outputImages)
-        {
-            memoryBarrier.image = outputImage;
-            pLogicalDevice->vkd.CmdPipelineBarrier(
-                    layoutCommandBuffer,
-                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                    0, 0, nullptr, 0, nullptr, 1, &memoryBarrier
-            );
+        std::vector<VkImageMemoryBarrier> barriers(outputImages.size(), memoryBarrier);
+        for (size_t i = 0; i < outputImages.size(); ++i) {
+            barriers[i].image = outputImages[i];
         }
+        pLogicalDevice->vkd.CmdPipelineBarrier(
+                layoutCommandBuffer,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                0, 0, nullptr, 0, nullptr, barriers.size(), barriers.data()
+        );
         result = pLogicalDevice->vkd.EndCommandBuffer(layoutCommandBuffer);
         ASSERT_VULKAN(result)
         VkSubmitInfo submitInfo;
@@ -148,13 +94,15 @@ namespace vkBasalt
         VkFence fence;
         result = pLogicalDevice->vkd.CreateFence(pLogicalDevice->device, &fenceInfo, nullptr, &fence);
         ASSERT_VULKAN(result)
+        Logger::trace("Fenced relayout");
         result = pLogicalDevice->vkd.QueueSubmit(pLogicalDevice->queue, 1, &submitInfo, fence);
         ASSERT_VULKAN(result)
         Logger::debug("Waiting on initial layout transition of AIST output images.");
-        result = pLogicalDevice->vkd.WaitForFences(pLogicalDevice->device, 1, &fence, VK_TRUE, 10'000'000'000);
+        result = pLogicalDevice->vkd.WaitForFences(pLogicalDevice->device, 1, &fence, VK_TRUE, 1'000'000'000);
         ASSERT_VULKAN(result)
         pLogicalDevice->vkd.DestroyFence(pLogicalDevice->device, fence, nullptr);
         pLogicalDevice->vkd.FreeCommandBuffers(pLogicalDevice->device, pLogicalDevice->commandPool, 1, &layoutCommandBuffer);
+        Logger::trace("Relayout complete, extra freed");
     }
 
     void AistEffect::createLayoutAndDescriptorSets()
@@ -242,6 +190,65 @@ namespace vkBasalt
                     nullptr
             );
         }
+    }
+
+    void AistEffect::createPipeline() {
+        VkPushConstantRange pushConstantRange;
+        pushConstantRange.size = sizeof(VkExtent2D);
+        pushConstantRange.offset = 0;
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
+        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutCreateInfo.pNext = nullptr;
+        pipelineLayoutCreateInfo.flags = 0;
+        pipelineLayoutCreateInfo.setLayoutCount = 1;
+        pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
+        pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+        pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+
+        VkResult result = pLogicalDevice->vkd.CreatePipelineLayout(
+                pLogicalDevice->device,
+                &pipelineLayoutCreateInfo,
+                nullptr,
+                &pipelineLayout
+        );
+        ASSERT_VULKAN(result)
+
+        VkShaderModuleCreateInfo shaderCreateInfo;
+        shaderCreateInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        shaderCreateInfo.pNext    = nullptr;
+        shaderCreateInfo.flags    = 0;
+        shaderCreateInfo.codeSize = sizeof(computeCode);
+        shaderCreateInfo.pCode    = computeCode;
+        result = pLogicalDevice->vkd.CreateShaderModule(pLogicalDevice->device, &shaderCreateInfo, nullptr, &computeModule);
+        ASSERT_VULKAN(result);
+        VkPipelineShaderStageCreateInfo shaderStageCreateInfo;
+        shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStageCreateInfo.pNext = nullptr;
+        shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        shaderStageCreateInfo.flags = 0;
+        shaderStageCreateInfo.module = computeModule;
+        shaderStageCreateInfo.pName = "main";
+        shaderStageCreateInfo.pSpecializationInfo = nullptr;
+
+        VkComputePipelineCreateInfo computePipelineCreateInfo;
+        computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        computePipelineCreateInfo.pNext = nullptr;
+        computePipelineCreateInfo.flags = 0;
+        computePipelineCreateInfo.layout = pipelineLayout;
+        computePipelineCreateInfo.stage = shaderStageCreateInfo;
+        computePipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+        computePipelineCreateInfo.basePipelineIndex = -1;
+
+        result = pLogicalDevice->vkd.CreateComputePipelines(
+                pLogicalDevice->device,
+                VK_NULL_HANDLE,
+                1,
+                &computePipelineCreateInfo,
+                nullptr,
+                &computePipeline
+        );
+        ASSERT_VULKAN(result)
     }
 
     void AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer)

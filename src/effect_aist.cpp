@@ -30,7 +30,8 @@ namespace vkBasalt
 
         inputImageViews = createImageViews(pLogicalDevice, format, inputImages);
         Logger::debug("created input ImageViews");
-        relayoutOutputImages();
+        //Deal with crash during swapchain recreation. Likely, need to wait for active semaphores.
+        //relayoutOutputImages();
         outputImageViews = createImageViews(pLogicalDevice, format, outputImages);
         Logger::debug("created output ImageViews");
 
@@ -221,7 +222,16 @@ namespace vkBasalt
         shaderCreateInfo.codeSize = sizeof(computeCode);
         shaderCreateInfo.pCode    = computeCode;
         result = pLogicalDevice->vkd.CreateShaderModule(pLogicalDevice->device, &shaderCreateInfo, nullptr, &computeModule);
-        ASSERT_VULKAN(result);
+        ASSERT_VULKAN(result)
+        uint32_t constIdx = 0;
+        VkSpecializationMapEntry specEntries[] = {
+            {.constantID = constIdx++, .offset=offsetof(VkExtent2D, width), .size=sizeof(VkExtent2D::width)},
+            {.constantID = constIdx++, .offset=offsetof(VkExtent2D, height), .size=sizeof(VkExtent2D::height)},
+        };
+        VkSpecializationInfo specInfo = {
+            .mapEntryCount = std::size(specEntries), .pMapEntries = specEntries,
+            .dataSize = sizeof(imageExtent), .pData = &imageExtent,
+        };
         VkPipelineShaderStageCreateInfo shaderStageCreateInfo;
         shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shaderStageCreateInfo.pNext = nullptr;
@@ -229,7 +239,7 @@ namespace vkBasalt
         shaderStageCreateInfo.flags = 0;
         shaderStageCreateInfo.module = computeModule;
         shaderStageCreateInfo.pName = "main";
-        shaderStageCreateInfo.pSpecializationInfo = nullptr;
+        shaderStageCreateInfo.pSpecializationInfo = &specInfo;
 
         VkComputePipelineCreateInfo computePipelineCreateInfo;
         computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -309,16 +319,12 @@ namespace vkBasalt
         );
         Logger::debug("after binding image storage");
 
-        pLogicalDevice->vkd.CmdPushConstants(
+        pLogicalDevice->vkd.CmdDispatch(
             commandBuffer,
-            pipelineLayout,
-            VK_SHADER_STAGE_COMPUTE_BIT, 0,
-            sizeof(VkExtent2D),
-            &imageExtent
+            (uint32_t) ceil(imageExtent.width / 16.0),
+            (uint32_t) ceil(imageExtent.height / 16.0),
+            1
         );
-        Logger::debug("after binding image storage");
-
-        pLogicalDevice->vkd.CmdDispatch(commandBuffer, 1, 1, 1);
         Logger::debug("after dispatch");
 
         pLogicalDevice->vkd.CmdPipelineBarrier(

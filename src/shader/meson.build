@@ -1,5 +1,6 @@
 shader_src = [
-    'aist.comp.glsl',
+    'aist/from_image.comp.glsl',
+    'aist/to_image.comp.glsl',
     'cas.frag.glsl',
     'deband.frag.glsl',
     'dls.frag.glsl',
@@ -20,4 +21,4 @@ glsl_generator = generator(glsl_compiler,
     output    : [ '@BASENAME@.h' ],
     arguments : [ '-V', '-x', '@INPUT@', '-o', '@OUTPUT@' ])
 
-shader_include = glsl_generator.process(shader_src)
+shader_include = glsl_generator.process(shader_src, preserve_path_from: meson.current_source_dir())

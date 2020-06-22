@@ -1,5 +1,5 @@
-#ifndef EFFECT_AIST_HPP_INCLUDED
-#define EFFECT_AIST_HPP_INCLUDED
+#pragma once
+
 #include <vector>
 #include <fstream>
 #include <string>
@@ -9,11 +9,10 @@
 #include <memory>
 
 #include "vulkan_include.hpp"
-
-#include "effect.hpp"
-#include "config.hpp"
-
 #include "logical_device.hpp"
+#include "config.hpp"
+#include "effect.hpp"
+#include "aist/nn_layer.h"
 
 namespace vkBasalt
 {
@@ -29,28 +28,21 @@ namespace vkBasalt
         virtual void applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer) override;
         virtual ~AistEffect();
 
-    protected:
+    private:
         LogicalDevice*               pLogicalDevice;
+        VkFormat                     format;
         VkExtent2D                   imageExtent;
         std::vector<VkImage>         inputImages;
         std::vector<VkImage>         outputImages;
+        Config*                      pConfig;
+
         std::vector<VkImageView>     inputImageViews;
         std::vector<VkImageView>     outputImageViews;
-        VkDescriptorSetLayout        descriptorSetLayout;
+        std::vector<std::unique_ptr<aist::Layer>> layers;
         VkDescriptorPool             descriptorPool;
-        std::vector<VkDescriptorSet> imageDescriptorSets;
-        VkShaderModule               computeModule;
-        VkPipelineLayout             pipelineLayout;
-        VkPipeline                   computePipeline;
-        VkFormat                     format;
-        Config*                      pConfig;
-        const static uint32_t        computeCode[];
 
-    private:
         void relayoutOutputImages();
         void createLayoutAndDescriptorSets();
-        void createPipeline();
     };
-} // namespace vkBasalt
 
-#endif // EFFECT_AIST_HPP_INCLUDED
+} // namespace vkBasalt

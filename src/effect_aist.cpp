@@ -78,7 +78,7 @@ void vkBasalt::AistEffect::allocateBuffers() {
     // (width / 2) × (height / 2) × 32 + (width / 4) × (height / 4) × 64
     //        spatial reduction|    |channels     |more SR    channels|
     // w x h x 12 of 32-bit floats.
-    VkDeviceSize intermediateSize = imageExtent.width * imageExtent.height * 32 * 4;
+    VkDeviceSize intermediateSize = imageExtent.width * imageExtent.height * 12 * 4;
     bufferInfo.size = intermediateSize;
     bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     intermediates.resize(inputImages.size());

@@ -13,6 +13,7 @@ void main() {
     const int cx = int(gl_GlobalInvocationID.x);
     const int cy = int(gl_GlobalInvocationID.y);
     if (cx >= WIDTH || cy >= HEIGHT) return;
-    float res[] = inTensor[cx * HEIGHT + cy];
-    imageStore(outImage, ivec2(cx, cy), vec4(res[0], res[1], res[2], 1.0));
+    const int offset = (cx % 2 * 2 + cy % 2) * 3;
+    float res[IN_CHANNELS] = inTensor[cx / 2 * (HEIGHT / 2) + cy / 2];
+    imageStore(outImage, ivec2(cx, cy), vec4(res[offset+0], res[offset+1], res[offset+2], 1.0));
 }

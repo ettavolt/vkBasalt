@@ -1,7 +1,7 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 #include "consts.comp.glsl"
-layout(local_size_x = 8, local_size_y = 8, local_size_z = 4) in;
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
 const int IN_CHANNELS = 3;
 const int OUT_CHANNELS = 32;
@@ -11,17 +11,17 @@ layout(std430, set = 0, binding = 0) uniform restrict readonly Convs {
 };
 layout(set = 1, binding = 0, rgba8) uniform restrict readonly image2D inImage;
 layout(std430, set = 1, binding = 1) buffer restrict writeonly OutTensor {
-    float outTensor[WIDTH * HEIGHT][OUT_CHANNELS];
+    float outTensor[WIDTH / 2 * HEIGHT / 2][OUT_CHANNELS];
 };
 
 void main() {
-    const int cx = int(gl_GlobalInvocationID.x);
-    const int cy = int(gl_GlobalInvocationID.y);
+    const int cx = int(gl_GlobalInvocationID.x) * 2;
+    const int cy = int(gl_GlobalInvocationID.y) * 2;
     if (cx >= WIDTH || cy >= HEIGHT) return;
     const uint c = int(gl_GlobalInvocationID.z);
     const int by = max(cy - 1, 0);
     const int dy = min(cy + 1, HEIGHT - 1);
-    float buf = biases[gl_GlobalInvocationID.z];
+    float buf = biases[c];
     float conv[IN_CHANNELS][9] = convs[c];
     int x = max(cx - 1, 0);
     buf += dot(
@@ -62,5 +62,5 @@ void main() {
     vec3(conv[0][8], conv[1][8], conv[2][8]),
     imageLoad(inImage, ivec2(x, dy)).rgb
     );
-    outTensor[cx * HEIGHT + cy][c] = buf;
+    outTensor[cx * HEIGHT / 4 + cy / 2][c] = buf;
 }

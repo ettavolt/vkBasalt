@@ -34,7 +34,7 @@ void vkBasalt::aist::FromImageLayer::writeSets(DsWriterHolder holder, uint32_t c
     VkWriteDescriptorSet writes[] = {*holder.weights, *holder.inImage, *holder.intermediate};
     VkDescriptorBufferInfo bufferInfo = *writes[0].pBufferInfo;
     bufferInfo.offset = 0;
-    bufferInfo.range = 10 * 3 * 4;// + 8; //8 for 16-bytes alignment.
+    bufferInfo.range = 10 * 3 * 4;
     writes[0].pBufferInfo = &bufferInfo;
     writes[0].dstSet = commonDescriptorSet;
     writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];

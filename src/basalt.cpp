@@ -218,6 +218,29 @@ namespace vkBasalt
         }
         deviceFeatures.shaderImageGatherExtended = VK_TRUE;
         modifiedCreateInfo.pEnabledFeatures      = &deviceFeatures;
+        VkDeviceCreateInfo *subfeatures = &modifiedCreateInfo;
+        while (subfeatures != nullptr) {
+            if (subfeatures->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES) {
+                ((VkPhysicalDeviceVulkan12Features *) subfeatures)->uniformBufferStandardLayout = true;
+                Logger::debug("Enabled UBSL on PD_V_1_2_Features");
+                break;
+            }
+            if (subfeatures->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES) {
+                ((VkPhysicalDeviceUniformBufferStandardLayoutFeatures *) subfeatures)->uniformBufferStandardLayout = true;
+                Logger::debug("Enabled UBSL on PD_UBSL_Features");
+                break;
+            }
+            subfeatures = (VkDeviceCreateInfo *) subfeatures->pNext;
+        }
+        VkPhysicalDeviceUniformBufferStandardLayoutFeatures toAddIfNotSet{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES,
+            .pNext = const_cast<void *>(modifiedCreateInfo.pNext),
+            .uniformBufferStandardLayout = true,
+        };
+        if (subfeatures == nullptr) {
+            Logger::debug("Added PD_UBSL_Features");
+            modifiedCreateInfo.pNext = &toAddIfNotSet;
+        }
 
         VkResult ret = createFunc(physicalDevice, &modifiedCreateInfo, pAllocator, pDevice);
 

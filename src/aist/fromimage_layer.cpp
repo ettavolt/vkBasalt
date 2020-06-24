@@ -28,13 +28,16 @@ void vkBasalt::aist::FromImageLayer::createPipeline() {
 }
 
 vkBasalt::aist::FromImageLayer::FromImageLayer(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount)
-        : Layer(pDevice, extent2D, chainCount) {}
+        : Layer(pDevice, extent2D, chainCount) {
+    depth = 8;
+    imageSizeProportion = 8.0;
+}
 
 void vkBasalt::aist::FromImageLayer::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
     VkWriteDescriptorSet writes[] = {*holder.weights, *holder.inImage, *holder.intermediate};
     VkDescriptorBufferInfo bufferInfo = *writes[0].pBufferInfo;
     bufferInfo.offset = 0;
-    bufferInfo.range = 10 * 3 * 4;
+    bufferInfo.range = (32 * 3 * 3 * 3 + 32) * 4;
     writes[0].pBufferInfo = &bufferInfo;
     writes[0].dstSet = commonDescriptorSet;
     writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];

@@ -1,48 +1,66 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 #include "consts.comp.glsl"
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 4) in;
 
 const int IN_CHANNELS = 3;
-//const int OUT_CHANNELS = 32;
-layout(std430, set = 0, binding = 0) uniform Convs {
-    //These are for multiplying rgb directly
-    float convs[10][3];
-    //vec3 sels[OUT_CHANNELS];
+const int OUT_CHANNELS = 32;
+layout(std430, set = 0, binding = 0) uniform restrict readonly Convs {
+    float convs[OUT_CHANNELS][IN_CHANNELS][3 * 3];
+    float biases[OUT_CHANNELS];
 };
 layout(set = 1, binding = 0, rgba8) uniform restrict readonly image2D inImage;
 layout(std430, set = 1, binding = 1) buffer restrict writeonly OutTensor {
-    float outTensor[WIDTH * HEIGHT][IN_CHANNELS];
+    float outTensor[WIDTH * HEIGHT][OUT_CHANNELS];
 };
-
-vec3 load_fma(int x, int y, int c, vec3 buf) {
-    return fma(
-        vec3(convs[c][0], convs[c][1], convs[c][2]),
-        imageLoad(inImage, ivec2(x, y)).rgb,
-        buf
-    );
-}
 
 void main() {
     const int cx = int(gl_GlobalInvocationID.x);
     const int cy = int(gl_GlobalInvocationID.y);
     if (cx >= WIDTH || cy >= HEIGHT) return;
-    const int bx = max(cx - 1, 0);
-    const int dx = min(cx + 1, WIDTH - 1);
+    const uint c = int(gl_GlobalInvocationID.z);
     const int by = max(cy - 1, 0);
     const int dy = min(cy + 1, HEIGHT - 1);
-    vec3 buf = vec3(convs[0][0], convs[0][1], convs[0][2]);
-    buf = load_fma(bx, by, 1, buf);
-    buf = load_fma(bx, cy, 2, buf);
-    buf = load_fma(bx, dy, 3, buf);
-    buf = load_fma(cx, by, 4, buf);
-    buf = load_fma(cx, cy, 5, buf);
-    buf = load_fma(cx, dy, 6, buf);
-    buf = load_fma(dx, by, 7, buf);
-    buf = load_fma(dx, cy, 8, buf);
-    buf = load_fma(dx, dy, 9, buf);
-    //TODO: fill OUT_CHANNELS now
-    const int outPos = cx * WIDTH + cy;
-    for (int c = 0; c < IN_CHANNELS; c++) {
-        outTensor[outPos][c] = buf[c];
-    }
+    float buf = biases[gl_GlobalInvocationID.z];
+    float conv[IN_CHANNELS][9] = convs[c];
+    int x = max(cx - 1, 0);
+    buf += dot(
+    vec3(conv[0][0], conv[1][0], conv[2][0]),
+    imageLoad(inImage, ivec2(x, by)).rgb
+    );
+    buf += dot(
+    vec3(conv[0][1], conv[1][1], conv[2][1]),
+    imageLoad(inImage, ivec2(x, cy)).rgb
+    );
+    buf += dot(
+    vec3(conv[0][2], conv[1][2], conv[2][2]),
+    imageLoad(inImage, ivec2(x, dy)).rgb
+    );
+    x = cx;
+    buf += dot(
+    vec3(conv[0][3], conv[1][3], conv[2][3]),
+    imageLoad(inImage, ivec2(cx, by)).rgb
+    );
+    buf += dot(
+    vec3(conv[0][4], conv[1][4], conv[2][4]),
+    imageLoad(inImage, ivec2(cx, cy)).rgb
+    );
+    buf += dot(
+    vec3(conv[0][5], conv[1][5], conv[2][5]),
+    imageLoad(inImage, ivec2(cx, dy)).rgb
+    );
+    x = min(cx + 1, WIDTH - 1);
+    buf += dot(
+    vec3(conv[0][6], conv[1][6], conv[2][6]),
+    imageLoad(inImage, ivec2(x, by)).rgb
+    );
+    buf += dot(
+    vec3(conv[0][7], conv[1][7], conv[2][7]),
+    imageLoad(inImage, ivec2(x, cy)).rgb
+    );
+    buf += dot(
+    vec3(conv[0][8], conv[1][8], conv[2][8]),
+    imageLoad(inImage, ivec2(x, dy)).rgb
+    );
+    outTensor[cx * HEIGHT + cy][c] = buf;
 }

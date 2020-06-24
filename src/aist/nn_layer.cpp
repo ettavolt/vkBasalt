@@ -175,7 +175,7 @@ void vkBasalt::aist::Layer::dispatchPipeline(VkCommandBuffer commandBuffer, uint
             commandBuffer,
             (uint32_t) std::ceil(imageExtent.width / imageSizeProportion),
             (uint32_t) std::ceil(imageExtent.height / imageSizeProportion),
-            1
+            depth
     );
 }
 

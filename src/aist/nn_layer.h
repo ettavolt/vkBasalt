@@ -43,6 +43,7 @@ namespace vkBasalt::aist {
         VkExtent2D imageExtent;
         uint32_t chainCount;
         float imageSizeProportion = 16.0;
+        uint32_t depth = 1;
 
         void createLayout(bool tapsIntoImage);
 

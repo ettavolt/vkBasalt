@@ -58,6 +58,9 @@ void vkBasalt::AistEffect::allocateBuffers() {
         Logger::err("Can't open aistWeigthsFile!");
     }
     auto fileSize = file.tellg();
+    // Should be:
+    // ((3 × 9 + 3 × 32) + (32 × 9 + 32 × 64)) × 2 + (64 × 9 + 64 × 64) × 2 × 15
+    // 4 - 32-bit float.
     VkDeviceSize weightsSize = fileSize;
     char* weightsHostBuf = new char [fileSize];
     file.seekg(0, std::ios::beg);
@@ -66,8 +69,6 @@ void vkBasalt::AistEffect::allocateBuffers() {
     Logger::debug("Loaded aistWeigthsFile");
     VkBufferCreateInfo bufferInfo{
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            // ((3 × 9 + 3 × 32) + (32 × 9 + 32 × 64)) × 2 + (64 × 9 + 64 × 64) × 2 × 15
-            // 4 - 32-bit float.
             .size = weightsSize,
             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -77,7 +78,7 @@ void vkBasalt::AistEffect::allocateBuffers() {
     // (width / 2) × (height / 2) × 32 + (width / 4) × (height / 4) × 64
     //        spatial reduction|    |channels     |more SR    channels|
     // w x h x 12 of 32-bit floats.
-    VkDeviceSize intermediateSize = imageExtent.width * imageExtent.height * 12 * 4;
+    VkDeviceSize intermediateSize = imageExtent.width * imageExtent.height * 32 * 4;
     bufferInfo.size = intermediateSize;
     bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     intermediates.resize(inputImages.size());

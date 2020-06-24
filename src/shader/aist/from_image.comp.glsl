@@ -62,5 +62,5 @@ void main() {
     vec3(conv[0][8], conv[1][8], conv[2][8]),
     imageLoad(inImage, ivec2(x, dy)).rgb
     );
-    outTensor[cx * HEIGHT / 4 + cy / 2][c] = buf;
+    outTensor[gl_GlobalInvocationID.x * HEIGHT / 2 + gl_GlobalInvocationID.y][c] = buf;
 }

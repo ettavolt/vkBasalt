@@ -29,15 +29,15 @@ vkBasalt::AistEffect::AistEffect(
         pConfig(pConfig) {
     Logger::debug("in creating AistEffect");
 
+    allocateBuffers();
+    Logger::debug("allocated buffers");
+
     inputImageViews = createImageViews(pLogicalDevice, format, inputImages);
     Logger::debug("created input ImageViews");
     //Deal with crash during swapchain recreation. Likely, need to wait for active semaphores.
     //relayoutOutputImages();
     outputImageViews = createImageViews(pLogicalDevice, format, outputImages);
     Logger::debug("created output ImageViews");
-
-    allocateBuffers();
-    Logger::debug("allocated buffers");
 
     uint32_t chainCount = inputImages.size();
 
@@ -52,7 +52,18 @@ vkBasalt::AistEffect::AistEffect(
 }
 
 void vkBasalt::AistEffect::allocateBuffers() {
-    VkDeviceSize weightsSize = 4 * 200'000;
+    std::string weightsFileName = pConfig->getOption<std::string>("aistWeigthsFile");
+    std::ifstream file(weightsFileName, std::ios::in|std::ios::binary|std::ios::ate);
+    if (!file.is_open()) {
+        Logger::err("Can't open aistWeigthsFile!");
+    }
+    auto fileSize = file.tellg();
+    VkDeviceSize weightsSize = fileSize;
+    char* weightsHostBuf = new char [fileSize];
+    file.seekg(0, std::ios::beg);
+    file.read(weightsHostBuf, fileSize);
+    file.close();
+    Logger::debug("Loaded aistWeigthsFile");
     VkBufferCreateInfo bufferInfo{
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             // ((3 × 9 + 3 × 32) + (32 × 9 + 32 × 64)) × 2 + (64 × 9 + 64 × 64) × 2 × 15
@@ -125,16 +136,10 @@ void vkBasalt::AistEffect::allocateBuffers() {
                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                  stagingBuffer,
                  stagingMemory);
-    void*    data;
-    result = pLogicalDevice->vkd.MapMemory(pLogicalDevice->device, stagingMemory, 0, weightsSize, 0, &data);
+    void* weightsCoherentBuf;
+    result = pLogicalDevice->vkd.MapMemory(pLogicalDevice->device, stagingMemory, 0, weightsSize, 0, &weightsCoherentBuf);
     ASSERT_VULKAN(result)
-    float testWeights[] = {
-            1.0, 1.0, 1.0,
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, -1.0, -1.0, -1.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-    };
-    std::memcpy(data, testWeights, sizeof(testWeights));
+    std::memcpy(weightsCoherentBuf, weightsHostBuf, weightsSize);
     pLogicalDevice->vkd.UnmapMemory(pLogicalDevice->device, stagingMemory);
     Logger::debug("AIST: staged weights.");
 

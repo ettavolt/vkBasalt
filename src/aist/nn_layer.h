@@ -4,6 +4,18 @@
 #include "../logical_device.hpp"
 
 namespace vkBasalt::aist {
+    struct DsCounterHolder {
+        uint32_t images;
+        uint32_t uniforms;
+        uint32_t intermediates;
+    };
+    struct DsWriterHolder {
+        VkWriteDescriptorSet *inImage;
+        VkWriteDescriptorSet *outImage;
+        VkWriteDescriptorSet *intermediate;
+        VkWriteDescriptorSet *weights;
+    };
+
     class Layer {
     public:
         VkDescriptorSetLayout commonDescriptorSetLayout = nullptr;
@@ -14,9 +26,9 @@ namespace vkBasalt::aist {
         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
         VkPipeline computePipeline = VK_NULL_HANDLE;
 
-        virtual void createLayout() = 0;
+        virtual void createLayout(DsCounterHolder *counters) = 0;
 
-        virtual void writeSets(VkWriteDescriptorSet *inImage, VkWriteDescriptorSet *outImage, uint32_t chainIdx) = 0;
+        virtual void writeSets(DsWriterHolder holder, uint32_t chainIdx) = 0;
 
         virtual void createPipeline();
 

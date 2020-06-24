@@ -4,8 +4,11 @@ const uint32_t code[] = {
 #include "aist/to_image.comp.h"
 };
 
-void vkBasalt::aist::ToImageLayer::createLayout() {
+void vkBasalt::aist::ToImageLayer::createLayout(DsCounterHolder *counters) {
     Layer::createLayout(true);
+    counters->images += chainCount;
+    counters->uniforms++;
+    counters->intermediates += chainCount;
 }
 
 void vkBasalt::aist::ToImageLayer::createPipeline() {
@@ -27,11 +30,8 @@ void vkBasalt::aist::ToImageLayer::createPipeline() {
 vkBasalt::aist::ToImageLayer::ToImageLayer(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount)
         : Layer(pDevice, extent2D, chainCount) {}
 
-void vkBasalt::aist::ToImageLayer::writeSets(
-        VkWriteDescriptorSet *inImage,
-        VkWriteDescriptorSet *outImage,
-        uint32_t chainIdx
-) {
+void vkBasalt::aist::ToImageLayer::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
+    auto outImage = holder.outImage;
     outImage->dstBinding = 1;
     outImage->dstSet = perChainDescriptorSets[chainIdx];
     Layer::writeSets(1, outImage);

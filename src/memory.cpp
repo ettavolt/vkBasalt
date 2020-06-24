@@ -8,7 +8,7 @@ namespace vkBasalt
         pLogicalDevice->vki.GetPhysicalDeviceMemoryProperties(pLogicalDevice->physicalDevice, &physicalDeviceMemoryProperties);
         for (uint32_t i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++)
         {
-            if ((typeFilter & (1 << i)) && (physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
+            if ((typeFilter & (1u << i)) && (physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
             {
                 return i;
             }

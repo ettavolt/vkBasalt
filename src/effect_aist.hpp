@@ -38,9 +38,13 @@ namespace vkBasalt
 
         std::vector<VkImageView>     inputImageViews;
         std::vector<VkImageView>     outputImageViews;
+        VkDeviceMemory               bufferMemory;
+        VkBuffer                     weights;
+        std::vector<VkBuffer>        intermediates;
         std::vector<std::unique_ptr<aist::Layer>> layers;
         VkDescriptorPool             descriptorPool;
 
+        void allocateBuffers();
         void relayoutOutputImages();
         void createLayoutAndDescriptorSets();
     };

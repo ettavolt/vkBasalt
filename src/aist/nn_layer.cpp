@@ -121,8 +121,8 @@ void vkBasalt::aist::Layer::createLayout(bool tapsIntoImage) {
             {
                     .binding = bindingIndex++,
                     .descriptorType = tapsIntoImage
-                            ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
-                            : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                      ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+                                      : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                     .descriptorCount = 1,
                     .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
                     .pImmutableSamplers = nullptr,
@@ -147,7 +147,7 @@ void vkBasalt::aist::Layer::createLayout(bool tapsIntoImage) {
     ASSERT_VULKAN(result)
 }
 
-void vkBasalt::aist::Layer::writeSets(uint32_t count, VkWriteDescriptorSet* writes) {
+void vkBasalt::aist::Layer::writeSets(uint32_t count, VkWriteDescriptorSet *writes) {
     pLogicalDevice->vkd.UpdateDescriptorSets(
             pLogicalDevice->device,
             count,

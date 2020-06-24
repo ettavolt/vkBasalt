@@ -7,9 +7,9 @@ namespace vkBasalt::aist {
     public:
         ToImageLayer(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount);
 
-        void createLayout() override;
+        void createLayout(DsCounterHolder *counters) override;
 
-        void writeSets(VkWriteDescriptorSet *inImage, VkWriteDescriptorSet *outImage, uint32_t chainIdx) override;
+        void writeSets(DsWriterHolder holder, uint32_t chainIdx) override;
 
         void createPipeline() override;
     };

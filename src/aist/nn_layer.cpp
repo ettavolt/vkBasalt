@@ -1,3 +1,4 @@
+#include <cmath>
 #include "nn_layer.h"
 
 vkBasalt::aist::Layer::Layer(LogicalDevice *pLogicalDevice, VkExtent2D imageExtent, uint32_t chainCount) :
@@ -155,4 +156,29 @@ void vkBasalt::aist::Layer::writeSets(uint32_t count, VkWriteDescriptorSet *writ
             0,
             nullptr
     );
+}
+
+void vkBasalt::aist::Layer::dispatchPipeline(VkCommandBuffer commandBuffer, uint32_t chainIdx) {
+    pLogicalDevice->vkd.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+    VkDescriptorSet sets[]{
+            commonDescriptorSet,
+            perChainDescriptorSets[chainIdx],
+    };
+    pLogicalDevice->vkd.CmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            pipelineLayout, 0,
+            std::size(sets), sets,
+            0, nullptr
+    );
+    pLogicalDevice->vkd.CmdDispatch(
+            commandBuffer,
+            (uint32_t) std::ceil(imageExtent.width / imageSizeProportion),
+            (uint32_t) std::ceil(imageExtent.height / imageSizeProportion),
+            1
+    );
+}
+
+void vkBasalt::aist::Layer::appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx) {
+    dispatchPipeline(commandBuffer, chainIdx);
 }

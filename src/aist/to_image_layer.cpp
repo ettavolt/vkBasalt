@@ -31,8 +31,12 @@ vkBasalt::aist::ToImageLayer::ToImageLayer(LogicalDevice *pDevice, VkExtent2D ex
         : Layer(pDevice, extent2D, chainCount) {}
 
 void vkBasalt::aist::ToImageLayer::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
-    auto outImage = holder.outImage;
-    outImage->dstBinding = 1;
-    outImage->dstSet = perChainDescriptorSets[chainIdx];
-    Layer::writeSets(1, outImage);
+    VkWriteDescriptorSet writes[] = {*holder.weights, *holder.outImage, *holder.intermediate};
+    VkDescriptorBufferInfo bufferInfo = *writes[0].pBufferInfo;
+    bufferInfo.offset = 0;
+    bufferInfo.range = 10 * 3 * 4;// + 8; //8 for 16-bytes alignment.
+    writes[0].pBufferInfo = &bufferInfo;
+    writes[0].dstSet = commonDescriptorSet;
+    writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
+    Layer::writeSets(std::size(writes), writes);
 }

@@ -9,8 +9,8 @@ layout(set = 0, binding = 0) uniform Convs {
     vec3 convs[10];
     //vec3 sels[OUT_CHANNELS];
 };
-layout(set = 1, binding = 1, rgba8) uniform restrict readonly image2D inImage;
-layout(set = 1, binding = 2) buffer restrict writeonly OutTensor {
+layout(set = 1, binding = 0, rgba8) uniform restrict readonly image2D inImage;
+layout(set = 1, binding = 1) buffer restrict writeonly OutTensor {
     float outTensor[WIDTH * HEIGHT][IN_CHANNELS];
 };
 

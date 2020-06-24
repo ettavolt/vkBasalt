@@ -65,7 +65,7 @@ void vkBasalt::AistEffect::allocateBuffers() {
     ASSERT_VULKAN(result)
     // (width / 2) × (height / 2) × 32 + (width / 4) × (height / 4) × 64
     //        spatial reduction|    |channels     |more SR    channels|
-    // w x h x 48 of 32-bit floats.
+    // w x h x 12 of 32-bit floats.
     VkDeviceSize intermediateSize = imageExtent.width * imageExtent.height * 12 * 4;
     bufferInfo.size = intermediateSize;
     bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -128,8 +128,15 @@ void vkBasalt::AistEffect::allocateBuffers() {
     void*    data;
     result = pLogicalDevice->vkd.MapMemory(pLogicalDevice->device, stagingMemory, 0, weightsSize, 0, &data);
     ASSERT_VULKAN(result)
-    std::memcpy(data, writeData, weightsSize);
+    float testWeights[] = {
+            1.0, 1.0, 1.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, -1.0, -1.0, -1.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    };
+    std::memcpy(data, testWeights, sizeof(testWeights));
     pLogicalDevice->vkd.UnmapMemory(pLogicalDevice->device, stagingMemory);
+    Logger::debug("AIST: staged weights.");
 
     VkCommandBufferAllocateInfo cbAllocInfo{
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -151,27 +158,6 @@ void vkBasalt::AistEffect::allocateBuffers() {
     };
     pLogicalDevice->vkd.BeginCommandBuffer(commandBuffer, &beginInfo);
 
-    VkBufferMemoryBarrier memoryBarrier{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .pNext = nullptr,
-        .srcAccessMask = 0,
-        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .buffer = weights,
-        .offset = 0,
-        .size = weightsSize,
-    };
-    pLogicalDevice->vkd.CmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            0, nullptr,
-            1, &memoryBarrier,
-            0, nullptr
-    );
-
     VkBufferCopy region{
         .srcOffset = 0,
         .dstOffset = 0,
@@ -179,30 +165,20 @@ void vkBasalt::AistEffect::allocateBuffers() {
     };
     pLogicalDevice->vkd.CmdCopyBuffer(commandBuffer, stagingBuffer, weights, 1, &region);
 
-    /*memoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    pLogicalDevice->vkd.CmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            0,
-            0, nullptr,
-            1, &memoryBarrier,
-            0, nullptr
-    );*/
-
     pLogicalDevice->vkd.EndCommandBuffer(commandBuffer);
     VkSubmitInfo submitInfo{
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .commandBufferCount = 1,
             .pCommandBuffers = &commandBuffer,
     };
+    Logger::debug("AIST: transferring weights.");
     pLogicalDevice->vkd.QueueSubmit(pLogicalDevice->queue, 1, &submitInfo, VK_NULL_HANDLE);
     pLogicalDevice->vkd.QueueWaitIdle(pLogicalDevice->queue);
 
     pLogicalDevice->vkd.FreeCommandBuffers(pLogicalDevice->device, pLogicalDevice->commandPool, 1, &commandBuffer);
     pLogicalDevice->vkd.FreeMemory(pLogicalDevice->device, stagingMemory, nullptr);
     pLogicalDevice->vkd.DestroyBuffer(pLogicalDevice->device, stagingBuffer, nullptr);
+    Logger::debug("AIST: transferred weights.");
 }
 
 void vkBasalt::AistEffect::relayoutOutputImages() {
@@ -327,6 +303,7 @@ void vkBasalt::AistEffect::createLayoutAndDescriptorSets() {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .pNext = nullptr,
             .dstSet = VK_NULL_HANDLE,
+            .dstBinding = 0,
             .dstArrayElement = 0,
             .descriptorCount = 1,
             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
@@ -341,16 +318,18 @@ void vkBasalt::AistEffect::createLayoutAndDescriptorSets() {
     VkDescriptorBufferInfo intermediateInfo{
             .buffer = VK_NULL_HANDLE,
             .offset = 0,
-            .range = 0,
+            .range = VK_WHOLE_SIZE,
     };
     VkWriteDescriptorSet intermediateWrite = writeDescriptorSets[0];
     intermediateWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    intermediateWrite.dstBinding = 1;
     intermediateWrite.pImageInfo = nullptr;
     intermediateWrite.pBufferInfo = &intermediateInfo;
     VkDescriptorBufferInfo weightsInfo = intermediateInfo;
     weightsInfo.buffer = weights;
     VkWriteDescriptorSet weightsWrite = intermediateWrite;
     weightsWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    weightsWrite.dstBinding = 0;
     weightsWrite.pBufferInfo = &weightsInfo;
     auto holder = aist::DsWriterHolder{
             .inImage = &(writeDescriptorSets[0]),
@@ -371,7 +350,7 @@ void vkBasalt::AistEffect::createLayoutAndDescriptorSets() {
 
 void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer) {
     Logger::debug("applying AistEffect to cb " + convertToString(commandBuffer));
-    // After shader has run modify layout of output image again to support present|transfer.
+    // After shader has run, modify layout of output image again to support present|transfer.
     VkImageMemoryBarrier outputAfterShaderBarrier;
     outputAfterShaderBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     outputAfterShaderBarrier.pNext = nullptr;
@@ -397,7 +376,7 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
     beforeShaderBarriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
     beforeShaderBarriers[1].image = inputImages[imageIndex];
 
-    // …and convert layout of output image as it is unmodified after previous execution of this (same!) buffer.
+    // …and convert layout of output image because it was not modified after previous execution of this (same!) buffer.
     beforeShaderBarriers[1].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
     beforeShaderBarriers[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     beforeShaderBarriers[1].oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -414,30 +393,32 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
     );
     Logger::debug("after the input pipeline barriers");
 
+    bool addBufferBarrier = false;
     for (const auto &layer : layers) {
-        pLogicalDevice->vkd.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, layer->computePipeline);
-        Logger::debug("after bind pipeline");
-
-        VkDescriptorSet sets[]{
-                layer->commonDescriptorSet,
-                layer->perChainDescriptorSets[imageIndex],
-        };
-        pLogicalDevice->vkd.CmdBindDescriptorSets(
-                commandBuffer,
-                VK_PIPELINE_BIND_POINT_COMPUTE,
-                layer->pipelineLayout, 0,
-                std::size(sets), sets,
-                0, nullptr
-        );
-        Logger::debug("after binding image storage");
-
-        pLogicalDevice->vkd.CmdDispatch(
-                commandBuffer,
-                (uint32_t) std::ceil(imageExtent.width / 16.0),
-                (uint32_t) std::ceil(imageExtent.height / 16.0),
-                1
-        );
-        Logger::debug("after dispatch");
+        if (addBufferBarrier) {
+            VkBufferMemoryBarrier memoryBarrier{
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                    .pNext = nullptr,
+                    .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
+                    .dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = intermediates[imageIndex],
+                    .offset = 0,
+                    .size = VK_WHOLE_SIZE,
+            };
+            pLogicalDevice->vkd.CmdPipelineBarrier(
+                    commandBuffer,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    0,
+                    0, nullptr,
+                    1, &memoryBarrier,
+                    0, nullptr
+            );
+        }
+        layer->appendCommands(commandBuffer, imageIndex);
+        addBufferBarrier = true;
     }
 
     pLogicalDevice->vkd.CmdPipelineBarrier(

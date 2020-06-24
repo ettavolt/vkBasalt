@@ -32,17 +32,22 @@ namespace vkBasalt::aist {
 
         virtual void createPipeline();
 
+        virtual void appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx);
+
         virtual ~Layer();
 
     protected:
-        Layer(LogicalDevice *pLogicalDevice, VkExtent2D imageExtent, uint32_t chainCount);;
+        Layer(LogicalDevice *pLogicalDevice, VkExtent2D imageExtent, uint32_t chainCount);
 
         LogicalDevice *pLogicalDevice;
         VkExtent2D imageExtent;
         uint32_t chainCount;
+        float imageSizeProportion = 16.0;
 
         void createLayout(bool tapsIntoImage);
 
         void writeSets(uint32_t count, VkWriteDescriptorSet *writes);
+
+        void dispatchPipeline(VkCommandBuffer commandBuffer, uint32_t chainIdx);
     };
 }

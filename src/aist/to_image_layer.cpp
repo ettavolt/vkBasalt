@@ -33,12 +33,20 @@ vkBasalt::aist::ToImageLayer::ToImageLayer(LogicalDevice *pDevice, VkExtent2D ex
 }
 
 void vkBasalt::aist::ToImageLayer::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
-    VkWriteDescriptorSet writes[] = {*holder.weights, *holder.outImage, *holder.intermediate};
-    VkDescriptorBufferInfo bufferInfo = *writes[0].pBufferInfo;
-    bufferInfo.offset = (32 * 3 * 3 * 3 + 32) * 4;
-    bufferInfo.range = (32 * 3 * 3 * 3 + 3) * 4;
-    writes[0].pBufferInfo = &bufferInfo;
+    VkWriteDescriptorSet writes[] = {*holder.weights, *holder.outImage, *holder.intermediate, *holder.intermediate};
+    VkDescriptorBufferInfo weightsBufferInfo = *writes[0].pBufferInfo;
+    weightsBufferInfo.offset = (32 * 3 * 3 * 3 + 32) * 4;
+    weightsBufferInfo.range = (32 * 3 * 3 * 3 + 3) * 4;
+    writes[0].pBufferInfo = &weightsBufferInfo;
     writes[0].dstSet = commonDescriptorSet;
-    writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
+    writes[3].dstSet = writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
+    writes[3].dstBinding += 1;
+    VkDescriptorBufferInfo inIntermediateBufferInfo = *writes[3].pBufferInfo;
+    inIntermediateBufferInfo.range = (imageExtent.width / 2 * (imageExtent.height / 2) * 32) * 4;
+    writes[2].pBufferInfo = &inIntermediateBufferInfo;
+    VkDescriptorBufferInfo subIntermediateBufferInfo = *writes[3].pBufferInfo;
+    subIntermediateBufferInfo.offset = inIntermediateBufferInfo.range;
+    subIntermediateBufferInfo.range = (imageExtent.width * imageExtent.height * 3) * 4;
+    writes[3].pBufferInfo = &subIntermediateBufferInfo;
     Layer::writeSets(std::size(writes), writes);
 }

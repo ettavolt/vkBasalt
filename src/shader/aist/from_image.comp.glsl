@@ -11,7 +11,7 @@ layout(std430, set = 0, binding = 0) uniform restrict readonly Convs {
 };
 layout(set = 1, binding = 0, rgba8) uniform restrict readonly image2D inImage;
 layout(std430, set = 1, binding = 1) buffer restrict writeonly OutTensor {
-    float outTensor[WIDTH / 2 * HEIGHT / 2][OUT_CHANNELS];
+    float outTensor[WIDTH / 2 * (HEIGHT / 2)][OUT_CHANNELS];
 };
 
 void main() {

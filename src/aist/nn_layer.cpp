@@ -7,26 +7,8 @@ vkBasalt::aist::Layer::Layer(LogicalDevice *pLogicalDevice, VkExtent2D imageExte
 }
 
 void vkBasalt::aist::Layer::createPipeline() {
-    VkDescriptorSetLayout setLayouts[]{
-            commonDescriptorSetLayout,
-            perChainDescriptorSetLayout,
-    };
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .setLayoutCount = std::size(setLayouts),
-            .pSetLayouts = setLayouts,
-            .pushConstantRangeCount = 0,
-            .pPushConstantRanges = nullptr,
-    };
-    VkResult result = pLogicalDevice->vkd.CreatePipelineLayout(
-            pLogicalDevice->device,
-            &pipelineLayoutCreateInfo,
-            nullptr,
-            &pipelineLayout
-    );
-    ASSERT_VULKAN(result)
+    VkResult result;
+    createPipelineLayout();
 
     uint32_t constIdx = 0;
     VkSpecializationMapEntry specEntries[]{
@@ -60,6 +42,29 @@ void vkBasalt::aist::Layer::createPipeline() {
             &computePipelineCreateInfo,
             nullptr,
             &computePipeline
+    );
+    ASSERT_VULKAN(result)
+}
+
+void vkBasalt::aist::Layer::createPipelineLayout() {
+    VkDescriptorSetLayout setLayouts[]{
+            this->commonDescriptorSetLayout,
+            this->perChainDescriptorSetLayout,
+    };
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = std::size(setLayouts),
+            .pSetLayouts = setLayouts,
+            .pushConstantRangeCount = 0,
+            .pPushConstantRanges = nullptr,
+    };
+    VkResult result = this->pLogicalDevice->vkd.CreatePipelineLayout(
+            this->pLogicalDevice->device,
+            &pipelineLayoutCreateInfo,
+            nullptr,
+            &this->pipelineLayout
     );
     ASSERT_VULKAN(result)
 }
@@ -186,6 +191,7 @@ void vkBasalt::aist::Layer::dispatchPipeline(VkCommandBuffer commandBuffer, uint
     );
 }
 
-void vkBasalt::aist::Layer::appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx) {
+void vkBasalt::aist::Layer::appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx,
+                                           VkBufferMemoryBarrier *bufferBarrierDto) {
     dispatchPipeline(commandBuffer, chainIdx);
 }

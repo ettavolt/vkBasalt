@@ -1,3 +1,5 @@
+#include <gmpxx.h>
+#include <cmath>
 #include "to_image_layer.hpp"
 
 const uint32_t code[] = {
@@ -9,6 +11,11 @@ void vkBasalt::aist::ToImageLayer::createLayout(DsCounterHolder *counters) {
     counters->images += chainCount;
     counters->uniforms++;
     counters->intermediates += chainCount;
+}
+
+vkBasalt::aist::ToImageLayer::ToImageLayer(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount)
+        : Layer(pDevice, extent2D, chainCount) {
+    imageSizeProportion = 8.0;
 }
 
 void vkBasalt::aist::ToImageLayer::createPipeline() {
@@ -27,9 +34,32 @@ void vkBasalt::aist::ToImageLayer::createPipeline() {
     Layer::createPipeline();
 }
 
-vkBasalt::aist::ToImageLayer::ToImageLayer(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount)
-        : Layer(pDevice, extent2D, chainCount) {
-    imageSizeProportion = 8.0;
+void vkBasalt::aist::ToImageLayer::createPipelineLayout() {
+    VkDescriptorSetLayout setLayouts[]{
+            commonDescriptorSetLayout,
+            perChainDescriptorSetLayout,
+    };
+    VkPushConstantRange pushConstantRange {
+            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+            .offset = 0,
+            .size = sizeof(uint32_t),
+    };
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = std::size(setLayouts),
+            .pSetLayouts = setLayouts,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &pushConstantRange,
+    };
+    VkResult result = pLogicalDevice->vkd.CreatePipelineLayout(
+            pLogicalDevice->device,
+            &pipelineLayoutCreateInfo,
+            nullptr,
+            &pipelineLayout
+    );
+    ASSERT_VULKAN(result)
 }
 
 void vkBasalt::aist::ToImageLayer::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
@@ -49,4 +79,48 @@ void vkBasalt::aist::ToImageLayer::writeSets(DsWriterHolder holder, uint32_t cha
     subIntermediateBufferInfo.range = (imageExtent.width * imageExtent.height * 3) * 4;
     writes[3].pBufferInfo = &subIntermediateBufferInfo;
     Layer::writeSets(std::size(writes), writes);
+}
+
+void vkBasalt::aist::ToImageLayer::appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx,
+                                                  VkBufferMemoryBarrier *bufferBarrierDto) {
+    bool addBufferBarrier = false;
+    for (uint32_t substage = 0; substage < 5; substage++) {
+        if (addBufferBarrier) {
+            pLogicalDevice->vkd.CmdPipelineBarrier(
+                    commandBuffer,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    0,
+                    0, nullptr,
+                    1, bufferBarrierDto,
+                    0, nullptr
+            );
+        }
+        pLogicalDevice->vkd.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+        VkDescriptorSet sets[]{
+                commonDescriptorSet,
+                perChainDescriptorSets[chainIdx],
+        };
+        pLogicalDevice->vkd.CmdBindDescriptorSets(
+                commandBuffer,
+                VK_PIPELINE_BIND_POINT_COMPUTE,
+                pipelineLayout, 0,
+                std::size(sets), sets,
+                0, nullptr
+        );
+        pLogicalDevice->vkd.CmdPushConstants(
+                commandBuffer,
+                pipelineLayout,
+                VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                sizeof(substage),
+                &substage
+        );
+        pLogicalDevice->vkd.CmdDispatch(
+                commandBuffer,
+                (uint32_t) std::ceil(imageExtent.width / imageSizeProportion),
+                (uint32_t) std::ceil(imageExtent.height / imageSizeProportion),
+                depth
+        );
+        addBufferBarrier = true;
+    }
 }

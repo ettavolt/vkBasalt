@@ -3,6 +3,9 @@
 #include "consts.comp.glsl"
 layout(local_size_x = 4, local_size_y = 4) in;
 
+layout(push_constant) uniform PushConsts {
+    uint substage;
+};
 const uint IN_CHANNELS = 32;
 const uint OUT_CHANNELS = 3;
 layout(std430, set = 0, binding = 0) uniform restrict readonly Convs {
@@ -10,11 +13,11 @@ layout(std430, set = 0, binding = 0) uniform restrict readonly Convs {
     float biases[OUT_CHANNELS];
 };
 layout(set = 1, binding = 0, rgba8) uniform restrict writeonly image2D outImage;
-layout(std430, set = 1, binding = 1) buffer restrict coherent InTensor {
+layout(std430, set = 1, binding = 1) buffer restrict readonly InTensor {
     float inTensor[WIDTH / 2 * HEIGHT / 2][IN_CHANNELS];
 };
 //Can't have two SpecConstant-sized fields in one struct, because their offsets are calculated for just one element
-layout(std430, set = 1, binding = 2) buffer restrict coherent OutTensor {
+layout(std430, set = 1, binding = 2) buffer restrict OutTensor {
     float outTensor[WIDTH * HEIGHT][OUT_CHANNELS];
 };
 
@@ -55,25 +58,29 @@ void main() {
     const uint sy = gl_GlobalInvocationID.y;
     if (sx >= WIDTH / 2 || sy >= HEIGHT / 2) return;
     const uint inPos = sx * HEIGHT / 2 + sy;
-    calcPixel(inPos, 0, 0, false);
-    calcPixel(inPos, 0, 1, false);
-    calcPixel(inPos, 1, 1, false);
-    calcPixel(inPos, 1, 0, false);
-    memoryBarrierBuffer();
-    barrier();
-    calcPixel(inPos, 1, -1, true);
-    calcPixel(inPos, 0, -1, true);
-    memoryBarrierBuffer();
-    barrier();
-    calcPixel(inPos, -1, -1, true);
-    memoryBarrierBuffer();
-    barrier();
-    calcPixel(inPos, -1, 0, true);
-    calcPixel(inPos, -1, 1, true);
-    memoryBarrierBuffer();
-    barrier();
-    pushPixel(0, 0);
-    pushPixel(0, 1);
-    pushPixel(1, 1);
-    pushPixel(1, 0);
+    switch (substage) {
+        case 0:
+        calcPixel(inPos, 0, 0, false);
+        calcPixel(inPos, 0, 1, false);
+        calcPixel(inPos, 1, 1, false);
+        calcPixel(inPos, 1, 0, false);
+        break;
+        case 1:
+        calcPixel(inPos, 1, -1, true);
+        calcPixel(inPos, 0, -1, true);
+        break;
+        case 2:
+        calcPixel(inPos, -1, -1, true);
+        break;
+        case 3:
+        calcPixel(inPos, -1, 0, true);
+        calcPixel(inPos, -1, 1, true);
+        break;
+        case 4:
+        pushPixel(0, 0);
+        pushPixel(0, 1);
+        pushPixel(1, 1);
+        pushPixel(1, 0);
+        break;
+    }
 }

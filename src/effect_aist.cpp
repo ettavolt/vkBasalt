@@ -52,7 +52,7 @@ vkBasalt::AistEffect::AistEffect(
 }
 
 void vkBasalt::AistEffect::allocateBuffers() {
-    std::string weightsFileName = pConfig->getOption<std::string>("aistWeigthsFile");
+    auto weightsFileName = pConfig->getOption<std::string>("aistWeigthsFile");
     std::ifstream file(weightsFileName, std::ios::in|std::ios::binary|std::ios::ate);
     if (!file.is_open()) {
         Logger::err("Can't open aistWeigthsFile!");
@@ -78,7 +78,7 @@ void vkBasalt::AistEffect::allocateBuffers() {
     // (width / 2) × (height / 2) × 32 + (width / 4) × (height / 4) × 64
     //        spatial reduction|    |channels     |more SR    channels|
     // w x h x 12 of 32-bit floats.
-    VkDeviceSize intermediateSize = imageExtent.width * imageExtent.height * 32 * 4;
+    VkDeviceSize intermediateSize = imageExtent.width * imageExtent.height * 12 * 4;
     bufferInfo.size = intermediateSize;
     bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     intermediates.resize(inputImages.size());
@@ -400,20 +400,20 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
     );
     Logger::debug("after the input pipeline barriers");
 
+    VkBufferMemoryBarrier memoryBarrier{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
+            .dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = intermediates[imageIndex],
+            .offset = 0,
+            .size = VK_WHOLE_SIZE,
+    };
     bool addBufferBarrier = false;
     for (const auto &layer : layers) {
         if (addBufferBarrier) {
-            VkBufferMemoryBarrier memoryBarrier{
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                    .pNext = nullptr,
-                    .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
-                    .dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = intermediates[imageIndex],
-                    .offset = 0,
-                    .size = VK_WHOLE_SIZE,
-            };
             pLogicalDevice->vkd.CmdPipelineBarrier(
                     commandBuffer,
                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -424,7 +424,7 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
                     0, nullptr
             );
         }
-        layer->appendCommands(commandBuffer, imageIndex);
+        layer->appendCommands(commandBuffer, imageIndex, &memoryBarrier);
         addBufferBarrier = true;
     }
 

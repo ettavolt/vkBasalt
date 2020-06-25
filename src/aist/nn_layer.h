@@ -32,7 +32,11 @@ namespace vkBasalt::aist {
 
         virtual void createPipeline();
 
-        virtual void appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx);
+        virtual void appendCommands(
+                VkCommandBuffer commandBuffer,
+                uint32_t chainIdx,
+                VkBufferMemoryBarrier *bufferBarrierDto
+        );
 
         virtual ~Layer();
 
@@ -46,6 +50,8 @@ namespace vkBasalt::aist {
         uint32_t depth = 1;
 
         void createLayout(bool tapsIntoImage);
+
+        virtual void createPipelineLayout();
 
         void writeSets(uint32_t count, VkWriteDescriptorSet *writes);
 

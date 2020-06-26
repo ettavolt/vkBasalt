@@ -1,24 +1,24 @@
 #include <gmpxx.h>
 #include <cmath>
-#include "to_image_layer.hpp"
+#include "up_conv_32_3_layer.hpp"
 
 const uint32_t code[] = {
-#include "aist/to_image.comp.h"
+#include "aist/up_conv_32_3.comp.h"
 };
 
-void vkBasalt::aist::ToImageLayer::createLayout(DsCounterHolder *counters) {
+void vkBasalt::aist::UpConv32t3::createLayout(DsCounterHolder *counters) {
     Layer::createLayout(true);
     counters->images += chainCount;
     counters->uniforms++;
     counters->intermediates += chainCount;
 }
 
-vkBasalt::aist::ToImageLayer::ToImageLayer(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount)
+vkBasalt::aist::UpConv32t3::UpConv32t3(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount)
         : Layer(pDevice, extent2D, chainCount) {
     imageSizeProportion = 8.0;
 }
 
-void vkBasalt::aist::ToImageLayer::createPipeline() {
+void vkBasalt::aist::UpConv32t3::createPipeline() {
     VkShaderModuleCreateInfo shaderCreateInfo{
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .pNext = nullptr,
             .flags = 0,
@@ -34,7 +34,7 @@ void vkBasalt::aist::ToImageLayer::createPipeline() {
     Layer::createPipeline();
 }
 
-void vkBasalt::aist::ToImageLayer::createPipelineLayout() {
+void vkBasalt::aist::UpConv32t3::createPipelineLayout() {
     VkDescriptorSetLayout setLayouts[]{
             commonDescriptorSetLayout,
             perChainDescriptorSetLayout,
@@ -62,7 +62,7 @@ void vkBasalt::aist::ToImageLayer::createPipelineLayout() {
     ASSERT_VULKAN(result)
 }
 
-void vkBasalt::aist::ToImageLayer::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
+void vkBasalt::aist::UpConv32t3::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
     VkWriteDescriptorSet writes[] = {*holder.weights, *holder.outImage, *holder.intermediate, *holder.intermediate};
     VkDescriptorBufferInfo weightsBufferInfo = *writes[0].pBufferInfo;
     weightsBufferInfo.offset = (32 * 3 * 3 * 3 + 32) * 4;
@@ -81,8 +81,8 @@ void vkBasalt::aist::ToImageLayer::writeSets(DsWriterHolder holder, uint32_t cha
     Layer::writeSets(std::size(writes), writes);
 }
 
-void vkBasalt::aist::ToImageLayer::appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx,
-                                                  VkBufferMemoryBarrier *bufferBarrierDto) {
+void vkBasalt::aist::UpConv32t3::appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx,
+                                                VkBufferMemoryBarrier *bufferBarrierDto) {
     bool addBufferBarrier = false;
     for (uint32_t substage = 0; substage < 5; substage++) {
         if (addBufferBarrier) {

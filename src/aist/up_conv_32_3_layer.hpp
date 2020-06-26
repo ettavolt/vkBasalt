@@ -3,9 +3,9 @@
 #include "nn_layer.h"
 
 namespace vkBasalt::aist {
-    class ToImageLayer : public Layer {
+    class UpConv32t3 : public Layer {
     public:
-        ToImageLayer(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount);
+        UpConv32t3(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount);
 
         void createLayout(DsCounterHolder *counters) override;
 

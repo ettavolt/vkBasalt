@@ -10,7 +10,7 @@
 #include "util.hpp"
 
 #include "aist/fromimage_layer.hpp"
-#include "aist/to_image_layer.hpp"
+#include "aist/up_conv_32_3_layer.hpp"
 #include "memory.hpp"
 
 vkBasalt::AistEffect::AistEffect(
@@ -42,7 +42,7 @@ vkBasalt::AistEffect::AistEffect(
     uint32_t chainCount = inputImages.size();
 
     layers.push_back(std::unique_ptr<aist::Layer>(new aist::FromImageLayer(pLogicalDevice, imageExtent, chainCount)));
-    layers.push_back(std::unique_ptr<aist::Layer>(new aist::ToImageLayer(pLogicalDevice, imageExtent, chainCount)));
+    layers.push_back(std::unique_ptr<aist::Layer>(new aist::UpConv32t3(pLogicalDevice, imageExtent, chainCount)));
 
     createLayoutAndDescriptorSets();
 

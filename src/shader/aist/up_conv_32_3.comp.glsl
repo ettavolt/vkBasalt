@@ -12,12 +12,11 @@ layout(std430, set = 0, binding = 0) uniform restrict readonly Convs {
     float convs[IN_CHANNELS][OUT_CHANNELS][3 * 3];
     float biases[OUT_CHANNELS];
 };
-layout(set = 1, binding = 0, rgba8) uniform restrict writeonly image2D outImage;
-layout(std430, set = 1, binding = 1) buffer restrict readonly InTensor {
+layout(std430, set = 1, binding = 0) buffer restrict readonly InTensor {
     float inTensor[WIDTH / 2 * HEIGHT / 2][IN_CHANNELS];
 };
 //Can't have two SpecConstant-sized fields in one struct, because their offsets are calculated for just one element
-layout(std430, set = 1, binding = 2) buffer restrict OutTensor {
+layout(std430, set = 1, binding = 1) buffer restrict OutTensor {
     float outTensor[WIDTH * HEIGHT][OUT_CHANNELS];
 };
 
@@ -45,14 +44,6 @@ void calcPixel(const in uint inPos, const in int dx, const in int dy, const in b
     outTensor[outPos] = buf;
 }
 
-void pushPixel(in int dx, in int dy) {
-    const int cx = int(gl_GlobalInvocationID.x) * 2 + dx;
-    const int cy = int(gl_GlobalInvocationID.y) * 2 + dy;
-    if (cx >= WIDTH || cy >= HEIGHT) return;
-    float res[OUT_CHANNELS] = outTensor[cx * HEIGHT + cy];
-    imageStore(outImage, ivec2(cx, cy), vec4(res[0], res[1], res[2], 1.0));
-}
-
 void main() {
     const uint sx = gl_GlobalInvocationID.x;
     const uint sy = gl_GlobalInvocationID.y;
@@ -75,12 +66,6 @@ void main() {
         case 3:
         calcPixel(inPos, -1, 0, true);
         calcPixel(inPos, -1, 1, true);
-        break;
-        case 4:
-        pushPixel(0, 0);
-        pushPixel(0, 1);
-        pushPixel(1, 1);
-        pushPixel(1, 0);
         break;
     }
 }

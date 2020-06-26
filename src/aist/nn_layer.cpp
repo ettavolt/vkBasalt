@@ -139,13 +139,6 @@ void vkBasalt::aist::Layer::createLayout(bool tapsIntoImage) {
                     .descriptorCount = 1,
                     .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
                     .pImmutableSamplers = nullptr,
-            },
-            {
-                    .binding = bindingIndex++,
-                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                    .descriptorCount = 1,
-                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                    .pImmutableSamplers = nullptr,
             }
     };
 

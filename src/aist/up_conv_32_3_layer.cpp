@@ -7,10 +7,9 @@ const uint32_t code[] = {
 };
 
 void vkBasalt::aist::UpConv32t3::createLayout(DsCounterHolder *counters) {
-    Layer::createLayout(true);
-    counters->images += chainCount;
+    Layer::createLayout(false);
     counters->uniforms++;
-    counters->intermediates += chainCount;
+    counters->intermediates += chainCount * 2;
 }
 
 vkBasalt::aist::UpConv32t3::UpConv32t3(LogicalDevice *pDevice, VkExtent2D extent2D, uint32_t chainCount)
@@ -63,28 +62,28 @@ void vkBasalt::aist::UpConv32t3::createPipelineLayout() {
 }
 
 void vkBasalt::aist::UpConv32t3::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
-    VkWriteDescriptorSet writes[] = {*holder.weights, *holder.outImage, *holder.intermediate, *holder.intermediate};
+    VkWriteDescriptorSet writes[] = {*holder.weights, *holder.intermediate, *holder.intermediate};
     VkDescriptorBufferInfo weightsBufferInfo = *writes[0].pBufferInfo;
     weightsBufferInfo.offset = (32 * 3 * 3 * 3 + 32) * 4;
     weightsBufferInfo.range = (32 * 3 * 3 * 3 + 3) * 4;
     writes[0].pBufferInfo = &weightsBufferInfo;
     writes[0].dstSet = commonDescriptorSet;
-    writes[3].dstSet = writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
-    writes[3].dstBinding += 1;
-    VkDescriptorBufferInfo inIntermediateBufferInfo = *writes[3].pBufferInfo;
+    writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
+    VkDescriptorBufferInfo inIntermediateBufferInfo = *writes[1].pBufferInfo;
     inIntermediateBufferInfo.range = (imageExtent.width / 2 * (imageExtent.height / 2) * 32) * 4;
-    writes[2].pBufferInfo = &inIntermediateBufferInfo;
-    VkDescriptorBufferInfo subIntermediateBufferInfo = *writes[3].pBufferInfo;
+    writes[1].pBufferInfo = &inIntermediateBufferInfo;
+    writes[1].dstBinding = 0;
+    VkDescriptorBufferInfo subIntermediateBufferInfo = *writes[2].pBufferInfo;
     subIntermediateBufferInfo.offset = inIntermediateBufferInfo.range;
     subIntermediateBufferInfo.range = (imageExtent.width * imageExtent.height * 3) * 4;
-    writes[3].pBufferInfo = &subIntermediateBufferInfo;
+    writes[2].pBufferInfo = &subIntermediateBufferInfo;
     Layer::writeSets(std::size(writes), writes);
 }
 
 void vkBasalt::aist::UpConv32t3::appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx,
                                                 VkBufferMemoryBarrier *bufferBarrierDto) {
     bool addBufferBarrier = false;
-    for (uint32_t substage = 0; substage < 5; substage++) {
+    for (uint32_t substage = 0; substage < 4; substage++) {
         if (addBufferBarrier) {
             pLogicalDevice->vkd.CmdPipelineBarrier(
                     commandBuffer,

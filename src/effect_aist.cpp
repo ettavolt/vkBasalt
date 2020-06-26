@@ -11,6 +11,7 @@
 
 #include "aist/fromimage_layer.hpp"
 #include "aist/up_conv_32_3_layer.hpp"
+#include "aist/to_image_layer.hpp"
 #include "memory.hpp"
 
 vkBasalt::AistEffect::AistEffect(
@@ -43,6 +44,7 @@ vkBasalt::AistEffect::AistEffect(
 
     layers.push_back(std::unique_ptr<aist::Layer>(new aist::FromImageLayer(pLogicalDevice, imageExtent, chainCount)));
     layers.push_back(std::unique_ptr<aist::Layer>(new aist::UpConv32t3(pLogicalDevice, imageExtent, chainCount)));
+    layers.push_back(std::unique_ptr<aist::Layer>(new aist::ToImageLayer(pLogicalDevice, imageExtent, chainCount)));
 
     createLayoutAndDescriptorSets();
 
@@ -384,6 +386,7 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
     beforeShaderBarriers[1].image = inputImages[imageIndex];
 
     // …and convert layout of output image because it was not modified after previous execution of this (same!) buffer.
+    //TODO: Convert just before the last layer.
     beforeShaderBarriers[1].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
     beforeShaderBarriers[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     beforeShaderBarriers[1].oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;

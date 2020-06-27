@@ -13,7 +13,7 @@ layout(std430, set = 0, binding = 0) uniform restrict readonly Convs {
     float biases[OUT_CHANNELS];
 };
 layout(std430, set = 1, binding = 0) buffer restrict readonly InTensor {
-    float inTensor[WIDTH / 2 * HEIGHT / 2][IN_CHANNELS];
+    float inTensor[(WIDTH / 2) * (HEIGHT / 2)][IN_CHANNELS];
 };
 //Can't have two SpecConstant-sized fields in one struct, because their offsets are calculated for just one element
 layout(std430, set = 1, binding = 1) buffer restrict OutTensor {
@@ -25,9 +25,6 @@ void calcPixel(const in uint inPos, const in int dx, const in int dy, const in b
     const int cy = int(gl_GlobalInvocationID.y) * 2 + dy;
     if (cx >= WIDTH || cy >= HEIGHT) return;
     if (cx < 0 || cy < 0) return;
-    const uint offset = (cx % 2 * 2 + cy % 2) * 3;
-    //cx / 2 * (HEIGHT / 2) <= cx / 2 * HEIGHT / 2
-    float res[IN_CHANNELS] = inTensor[cx / 2 * (HEIGHT / 2) + cy / 2];
     const int outPos = cx * HEIGHT + cy;
     float[OUT_CHANNELS] buf;
     if (add) {

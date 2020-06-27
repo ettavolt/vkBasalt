@@ -10,7 +10,8 @@ layout(std430, set = 1, binding = 1) buffer restrict readonly InTensor {
 };
 
 float activate(in float res) {
-    return tanh(res) / 2 + 0.5;
+    return res;
+    //return fma(tanh(res), 0.5, 0.5);
 }
 
 void main() {

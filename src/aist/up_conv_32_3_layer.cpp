@@ -63,20 +63,16 @@ void vkBasalt::aist::UpConv32t3::createPipelineLayout() {
 
 void vkBasalt::aist::UpConv32t3::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
     VkWriteDescriptorSet writes[] = {*holder.weights, *holder.intermediate, *holder.intermediate};
-    VkDescriptorBufferInfo weightsBufferInfo = *writes[0].pBufferInfo;
-    weightsBufferInfo.offset = (32 * 3 * 3 * 3 + 32) * 4;
-    weightsBufferInfo.range = (32 * 3 * 3 * 3 + 3) * 4;
-    writes[0].pBufferInfo = &weightsBufferInfo;
+    auto pWeightsInfo = const_cast<VkDescriptorBufferInfo *>(holder.weights->pBufferInfo);
+    pWeightsInfo->range = (32 * 3 * 3 * 3 + 3) * 4;
     writes[0].dstSet = commonDescriptorSet;
     writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
-    VkDescriptorBufferInfo inIntermediateBufferInfo = *writes[1].pBufferInfo;
-    inIntermediateBufferInfo.range = (imageExtent.width / 2 * (imageExtent.height / 2) * 32) * 4;
+    VkDescriptorBufferInfo inIntermediateBufferInfo = *holder.intermediate->pBufferInfo;
     writes[1].pBufferInfo = &inIntermediateBufferInfo;
     writes[1].dstBinding = 0;
-    VkDescriptorBufferInfo subIntermediateBufferInfo = *writes[2].pBufferInfo;
-    subIntermediateBufferInfo.offset = inIntermediateBufferInfo.range;
-    subIntermediateBufferInfo.range = (imageExtent.width * imageExtent.height * 3) * 4;
-    writes[2].pBufferInfo = &subIntermediateBufferInfo;
+    auto pOutInfo = const_cast<VkDescriptorBufferInfo *>(holder.intermediate->pBufferInfo);
+    pOutInfo->offset = pOutInfo->range;
+    pOutInfo->range = (imageExtent.width * imageExtent.height * 3) * 4;
     Layer::writeSets(std::size(writes), writes);
 }
 

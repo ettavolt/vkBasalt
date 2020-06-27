@@ -33,11 +33,10 @@ void vkBasalt::aist::ToImageLayer::createPipeline() {
 void vkBasalt::aist::ToImageLayer::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
     //Weights are not used, but the common DS needs something written.
     VkWriteDescriptorSet writes[] = {*holder.weights, *holder.outImage, *holder.intermediate};
+    auto pWeightsInfo = const_cast<VkDescriptorBufferInfo *>(holder.weights->pBufferInfo);
+    pWeightsInfo->offset = 0;
+    pWeightsInfo->range = 256;
     writes[0].dstSet = commonDescriptorSet;
-    VkDescriptorBufferInfo inIntermediateBufferInfo = *writes[2].pBufferInfo;
-    inIntermediateBufferInfo.offset = (imageExtent.width / 2 * (imageExtent.height / 2) * 32) * 4;
-    inIntermediateBufferInfo.range = (imageExtent.width * imageExtent.height * 3) * 4;
-    writes[2].pBufferInfo = &inIntermediateBufferInfo;
     writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
     Layer::writeSets(std::size(writes), writes);
 }

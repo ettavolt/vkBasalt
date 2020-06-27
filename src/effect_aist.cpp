@@ -326,7 +326,7 @@ void vkBasalt::AistEffect::createLayoutAndDescriptorSets() {
     VkDescriptorBufferInfo intermediateInfo{
             .buffer = VK_NULL_HANDLE,
             .offset = 0,
-            .range = VK_WHOLE_SIZE,
+            .range = 0,
     };
     VkWriteDescriptorSet intermediateWrite = writeDescriptorSets[0];
     intermediateWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -349,8 +349,12 @@ void vkBasalt::AistEffect::createLayoutAndDescriptorSets() {
         imageInfos[0].imageView = inputImageViews[chainIdx];
         imageInfos[1].imageView = outputImageViews[chainIdx];
         intermediateInfo.buffer = intermediates[chainIdx];
+        weightsInfo.offset = 0;
+        weightsInfo.range = 0;
         for (const auto &layer : layers) {
             layer->writeSets(holder, chainIdx);
+            weightsInfo.offset += weightsInfo.range;
+            weightsInfo.range = 0;
             Logger::debug("Wrote DS in chain " + std::to_string(chainIdx));
         }
     }

@@ -18,6 +18,8 @@ namespace vkBasalt::aist {
 
     class Layer {
     public:
+        static VkDeviceSize alignTo256Bytes(VkDeviceSize size);
+
         virtual void createLayout(DsCounterHolder *counters) = 0;
 
         virtual void writeSets(DsWriterHolder holder, uint32_t chainIdx) = 0;

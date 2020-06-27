@@ -36,11 +36,11 @@ vkBasalt::aist::FromImageLayer::FromImageLayer(LogicalDevice *pDevice, VkExtent2
 void vkBasalt::aist::FromImageLayer::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
     VkWriteDescriptorSet writes[] = {*holder.weights, *holder.inImage, *holder.intermediate};
     auto pWeightsInfo = const_cast<VkDescriptorBufferInfo *>(holder.weights->pBufferInfo);
-    pWeightsInfo->range = (32 * 3 * 3 * 3 + 32) * 4;
+    pWeightsInfo->range = alignTo256Bytes((32 * 3 * 3 * 3) * 4);
     writes[0].dstSet = commonDescriptorSet;
     auto pOutInfo = const_cast<VkDescriptorBufferInfo *>(holder.intermediate->pBufferInfo);
     pOutInfo->offset = 0;
-    pOutInfo->range = (imageExtent.width / 2 * (imageExtent.height / 2) * 32) * 4;
+    pOutInfo->range = alignTo256Bytes((imageExtent.width / 2 * (imageExtent.height / 2) * 32) * 4);
     writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
     Layer::writeSets(std::size(writes), writes);
 }

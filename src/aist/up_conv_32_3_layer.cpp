@@ -1,4 +1,3 @@
-#include <gmpxx.h>
 #include <cmath>
 #include "up_conv_32_3_layer.hpp"
 
@@ -64,7 +63,7 @@ void vkBasalt::aist::UpConv32t3::createPipelineLayout() {
 void vkBasalt::aist::UpConv32t3::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
     VkWriteDescriptorSet writes[] = {*holder.weights, *holder.intermediate, *holder.intermediate};
     auto pWeightsInfo = const_cast<VkDescriptorBufferInfo *>(holder.weights->pBufferInfo);
-    pWeightsInfo->range = (32 * 3 * 3 * 3 + 3) * 4;
+    pWeightsInfo->range = alignTo256Bytes((32 * 3 * 3 * 3 + 3) * 4);
     writes[0].dstSet = commonDescriptorSet;
     writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
     VkDescriptorBufferInfo inIntermediateBufferInfo = *holder.intermediate->pBufferInfo;
@@ -72,7 +71,7 @@ void vkBasalt::aist::UpConv32t3::writeSets(DsWriterHolder holder, uint32_t chain
     writes[1].dstBinding = 0;
     auto pOutInfo = const_cast<VkDescriptorBufferInfo *>(holder.intermediate->pBufferInfo);
     pOutInfo->offset = pOutInfo->range;
-    pOutInfo->range = (imageExtent.width * imageExtent.height * 3) * 4;
+    pOutInfo->range = alignTo256Bytes((imageExtent.width * imageExtent.height * 3) * 4);
     Layer::writeSets(std::size(writes), writes);
 }
 

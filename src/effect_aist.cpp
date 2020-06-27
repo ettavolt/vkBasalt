@@ -10,6 +10,7 @@
 #include "util.hpp"
 
 #include "aist/fromimage_layer.hpp"
+#include "aist/in_2d_layer.hpp"
 #include "aist/up_conv_32_3_layer.hpp"
 #include "aist/to_image_layer.hpp"
 #include "memory.hpp"
@@ -43,6 +44,7 @@ vkBasalt::AistEffect::AistEffect(
     uint32_t chainCount = inputImages.size();
 
     layers.push_back(std::unique_ptr<aist::Layer>(new aist::FromImageLayer(pLogicalDevice, imageExtent, chainCount)));
+    layers.push_back(std::unique_ptr<aist::Layer>(new aist::In2D(pLogicalDevice, imageExtent, chainCount, 2, 32)));
     layers.push_back(std::unique_ptr<aist::Layer>(new aist::UpConv32t3(pLogicalDevice, imageExtent, chainCount)));
     layers.push_back(std::unique_ptr<aist::Layer>(new aist::ToImageLayer(pLogicalDevice, imageExtent, chainCount)));
 
@@ -80,7 +82,7 @@ void vkBasalt::AistEffect::allocateBuffers() {
     // (width / 2) × (height / 2) × 32 + (width / 4) × (height / 4) × 64
     //        spatial reduction|    |channels     |more SR    channels|
     // w x h x 12 of 32-bit floats.
-    VkDeviceSize intermediateSize = imageExtent.width * imageExtent.height * 12 * 4;
+    VkDeviceSize intermediateSize = aist::Layer::alignTo256Bytes(imageExtent.width * imageExtent.height * 12 * 4);
     bufferInfo.size = intermediateSize;
     bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     intermediates.resize(inputImages.size());

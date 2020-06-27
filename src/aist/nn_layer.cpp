@@ -216,3 +216,11 @@ void vkBasalt::aist::Layer::appendCommands(VkCommandBuffer commandBuffer, uint32
                                            VkBufferMemoryBarrier *bufferBarrierDto) {
     dispatchPipeline(commandBuffer, chainIdx);
 }
+
+VkDeviceSize vkBasalt::aist::Layer::alignTo256Bytes(VkDeviceSize size) {
+    VkDeviceSize overWholeWeight = size % 256;
+    if (overWholeWeight > 0) {
+        size += 256 - overWholeWeight;
+    }
+    return size;
+}

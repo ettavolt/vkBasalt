@@ -7,7 +7,6 @@ const int IN_CHANNELS = 3;
 const int OUT_CHANNELS = 32;
 layout(std430, set = 0, binding = 0) uniform restrict readonly Convs {
     float convs[OUT_CHANNELS][IN_CHANNELS][3 * 3];
-    float biases[OUT_CHANNELS];
 };
 layout(set = 1, binding = 0, rgba8) uniform restrict readonly image2D inImage;
 layout(std430, set = 1, binding = 1) buffer restrict writeonly OutTensor {
@@ -18,10 +17,10 @@ void main() {
     const int cx = int(gl_GlobalInvocationID.x) * 2;
     const int cy = int(gl_GlobalInvocationID.y) * 2;
     if (cx >= WIDTH || cy >= HEIGHT) return;
-    const uint c = int(gl_GlobalInvocationID.z);
+    const uint c = gl_GlobalInvocationID.z;
     const int by = max(cy - 1, 0);
     const int dy = min(cy + 1, HEIGHT - 1);
-    float buf = biases[c];
+    float buf = 0.0;
     float conv[IN_CHANNELS][9] = convs[c];
     int x = max(cx - 1, 0);
     buf += dot(

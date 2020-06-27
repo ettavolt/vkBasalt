@@ -11,6 +11,7 @@ vkBasalt_src = [
     'effect.cpp',
     'aist/nn_layer.cpp',
     'aist/fromimage_layer.cpp',
+    'aist/in_2d_layer.cpp',
     'aist/up_conv_32_3_layer.cpp',
     'aist/to_image_layer.cpp',
     'effect_aist.cpp',

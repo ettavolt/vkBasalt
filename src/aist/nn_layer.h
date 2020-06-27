@@ -18,17 +18,11 @@ namespace vkBasalt::aist {
 
     class Layer {
     public:
-        VkDescriptorSetLayout commonDescriptorSetLayout = nullptr;
-        VkDescriptorSetLayout perChainDescriptorSetLayout = nullptr;
-        VkDescriptorSet commonDescriptorSet = nullptr;
-        std::vector<VkDescriptorSet> perChainDescriptorSets;
-        VkShaderModule computeModule = VK_NULL_HANDLE;
-        VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-        VkPipeline computePipeline = VK_NULL_HANDLE;
-
         virtual void createLayout(DsCounterHolder *counters) = 0;
 
         virtual void writeSets(DsWriterHolder holder, uint32_t chainIdx) = 0;
+
+        virtual void createDescriptorSets(VkDescriptorPool descriptorPool);
 
         virtual void createPipeline();
 
@@ -48,6 +42,13 @@ namespace vkBasalt::aist {
         uint32_t chainCount;
         float imageSizeProportion = 16.0;
         uint32_t depth = 1;
+        VkDescriptorSetLayout commonDescriptorSetLayout = nullptr;
+        VkDescriptorSetLayout perChainDescriptorSetLayout = nullptr;
+        VkDescriptorSet commonDescriptorSet = nullptr;
+        std::vector<VkDescriptorSet> perChainDescriptorSets;
+        VkShaderModule computeModule = VK_NULL_HANDLE;
+        VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+        VkPipeline computePipeline = VK_NULL_HANDLE;
 
         void createLayout(bool tapsIntoImage);
 

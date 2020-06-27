@@ -13,5 +13,11 @@ namespace vkBasalt::aist {
 
         void createPipeline() override;
 
-     };
+        void appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx,
+                            VkBufferMemoryBarrier *bufferBarrierDto) override;
+
+    protected:
+        void createPipelineLayout() override;
+
+    };
 }

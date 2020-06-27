@@ -1,3 +1,4 @@
+#include <cmath>
 #include "to_image_layer.hpp"
 
 const uint32_t code[] = {
@@ -8,10 +9,62 @@ vkBasalt::aist::ToImageLayer::ToImageLayer(LogicalDevice *pDevice, VkExtent2D ex
         : Layer(pDevice, extent2D, chainCount) {}
 
 void vkBasalt::aist::ToImageLayer::createLayout(DsCounterHolder *counters) {
-    Layer::createLayout(true);
+    uint32_t bindingIndex = 0;
+    VkDescriptorSetLayoutBinding storageBindings[]{
+            {
+                    .binding = bindingIndex++,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                    .descriptorCount = 1,
+                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                    .pImmutableSamplers = nullptr,
+            },
+            {
+                    .binding = bindingIndex++,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .descriptorCount = 1,
+                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                    .pImmutableSamplers = nullptr,
+            }
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetCreateInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .bindingCount = bindingIndex,
+            .pBindings    = storageBindings,
+    };
+    VkResult result = pLogicalDevice->vkd.CreateDescriptorSetLayout(
+            pLogicalDevice->device,
+            &descriptorSetCreateInfo,
+            nullptr,
+            &perChainDescriptorSetLayout
+    );
+    ASSERT_VULKAN(result)
     counters->images += chainCount;
-    counters->uniforms++;
     counters->intermediates += chainCount;
+}
+
+void vkBasalt::aist::ToImageLayer::createPipelineLayout() {
+    VkDescriptorSetLayout setLayouts[]{
+            perChainDescriptorSetLayout,
+    };
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = std::size(setLayouts),
+            .pSetLayouts = setLayouts,
+            .pushConstantRangeCount = 0,
+            .pPushConstantRanges = nullptr,
+    };
+    VkResult result = pLogicalDevice->vkd.CreatePipelineLayout(
+            pLogicalDevice->device,
+            &pipelineLayoutCreateInfo,
+            nullptr,
+            &pipelineLayout
+    );
+    ASSERT_VULKAN(result)
 }
 
 void vkBasalt::aist::ToImageLayer::createPipeline() {
@@ -31,12 +84,28 @@ void vkBasalt::aist::ToImageLayer::createPipeline() {
 }
 
 void vkBasalt::aist::ToImageLayer::writeSets(DsWriterHolder holder, uint32_t chainIdx) {
-    //Weights are not used, but the common DS needs something written.
-    VkWriteDescriptorSet writes[] = {*holder.weights, *holder.outImage, *holder.intermediate};
-    auto pWeightsInfo = const_cast<VkDescriptorBufferInfo *>(holder.weights->pBufferInfo);
-    pWeightsInfo->offset = 0;
-    pWeightsInfo->range = 256;
-    writes[0].dstSet = commonDescriptorSet;
-    writes[2].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
+    VkWriteDescriptorSet writes[] = {*holder.outImage, *holder.intermediate};
+    writes[0].dstSet = writes[1].dstSet = perChainDescriptorSets[chainIdx];
     Layer::writeSets(std::size(writes), writes);
+}
+
+void vkBasalt::aist::ToImageLayer::appendCommands(VkCommandBuffer commandBuffer, uint32_t chainIdx,
+                                                  VkBufferMemoryBarrier *bufferBarrierDto) {
+    pLogicalDevice->vkd.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+    VkDescriptorSet sets[]{
+            perChainDescriptorSets[chainIdx],
+    };
+    pLogicalDevice->vkd.CmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            pipelineLayout, 0,
+            std::size(sets), sets,
+            0, nullptr
+    );
+    pLogicalDevice->vkd.CmdDispatch(
+            commandBuffer,
+            (uint32_t) std::ceil(imageExtent.width / imageSizeProportion),
+            (uint32_t) std::ceil(imageExtent.height / imageSizeProportion),
+            depth
+    );
 }

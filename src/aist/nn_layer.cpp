@@ -153,6 +153,34 @@ void vkBasalt::aist::Layer::createLayout(bool tapsIntoImage) {
     ASSERT_VULKAN(result)
 }
 
+void vkBasalt::aist::Layer::createDescriptorSets(VkDescriptorPool descriptorPool) {
+    std::vector<VkDescriptorSetLayout> layouts(chainCount, perChainDescriptorSetLayout);
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .pNext = nullptr,
+            .descriptorPool = descriptorPool,
+            .descriptorSetCount = chainCount,
+    };
+    descriptorSetAllocateInfo.pSetLayouts = layouts.data();
+    VkResult result = pLogicalDevice->vkd.AllocateDescriptorSets(
+            pLogicalDevice->device,
+            &descriptorSetAllocateInfo,
+            perChainDescriptorSets.data()
+    );
+    ASSERT_VULKAN(result)
+    if (commonDescriptorSetLayout != nullptr) {
+        descriptorSetAllocateInfo.descriptorSetCount = 1;
+        descriptorSetAllocateInfo.pSetLayouts = &commonDescriptorSetLayout;
+        result = pLogicalDevice->vkd.AllocateDescriptorSets(
+                pLogicalDevice->device,
+                &descriptorSetAllocateInfo,
+                &commonDescriptorSet
+        );
+        ASSERT_VULKAN(result)
+    } else {
+        Logger::debug("Skipped creation of commonDescriptorSet");
+    }
+}
+
 void vkBasalt::aist::Layer::writeSets(uint32_t count, VkWriteDescriptorSet *writes) {
     pLogicalDevice->vkd.UpdateDescriptorSets(
             pLogicalDevice->device,

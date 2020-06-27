@@ -256,7 +256,6 @@ void vkBasalt::AistEffect::relayoutOutputImages() {
 }
 
 void vkBasalt::AistEffect::createLayoutAndDescriptorSets() {
-    VkResult result;
     aist::DsCounterHolder counters{
             .images = 0,
             .uniforms = 0,
@@ -277,27 +276,7 @@ void vkBasalt::AistEffect::createLayoutAndDescriptorSets() {
     Logger::debug("created descriptorPool");
 
     for (const auto &layer : layers) {
-        std::vector<VkDescriptorSetLayout> layouts(chainCount, layer->perChainDescriptorSetLayout);
-        VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .pNext = nullptr,
-                .descriptorPool = descriptorPool,
-                .descriptorSetCount = chainCount,
-        };
-        descriptorSetAllocateInfo.pSetLayouts = layouts.data();
-        result = pLogicalDevice->vkd.AllocateDescriptorSets(
-                pLogicalDevice->device,
-                &descriptorSetAllocateInfo,
-                layer->perChainDescriptorSets.data()
-        );
-        ASSERT_VULKAN(result)
-        descriptorSetAllocateInfo.descriptorSetCount = 1;
-        descriptorSetAllocateInfo.pSetLayouts = &layer->commonDescriptorSetLayout;
-        result = pLogicalDevice->vkd.AllocateDescriptorSets(
-                pLogicalDevice->device,
-                &descriptorSetAllocateInfo,
-                &layer->commonDescriptorSet
-        );
-        ASSERT_VULKAN(result)
+        layer->createDescriptorSets(descriptorPool);
     }
     Logger::debug("after allocating descriptor Sets");
 

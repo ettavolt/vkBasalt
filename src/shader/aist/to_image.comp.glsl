@@ -4,8 +4,8 @@
 layout(local_size_x = 16, local_size_y = 16) in;
 
 const uint IN_CHANNELS = 3;
-layout(set = 1, binding = 0, rgba8) uniform restrict writeonly image2D outImage;
-layout(std430, set = 1, binding = 1) buffer restrict readonly InTensor {
+layout(set = 0, binding = 0, rgba8) uniform restrict writeonly image2D outImage;
+layout(set = 0, binding = 1, std430) buffer restrict readonly InTensor {
     float inTensor[WIDTH * HEIGHT][IN_CHANNELS];
 };
 

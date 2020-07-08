@@ -6,7 +6,7 @@ const uint32_t code[] = {
 };
 
 vkBasalt::aist::In2D::Specialization::Specialization(VkExtent2D extent2D, uint32_t spatialDivisor, uint32_t channels)
-    : width(extent2D.width), height(extent2D.height), spatialDivisor(spatialDivisor), channels(channels) {}
+    : width(extent2D.width / spatialDivisor), height(extent2D.height / spatialDivisor), channels(channels) {}
 
 vkBasalt::aist::In2D::In2D(
         LogicalDevice *pDevice,
@@ -15,8 +15,6 @@ vkBasalt::aist::In2D::In2D(
         uint32_t spatialDivisor,
         uint32_t channels
 ) : Layer(pDevice, extent2D, chainCount), specialization(extent2D, spatialDivisor, channels) {
-    imageSizeProportion = spatialDivisor;
-    depth = 1;
 }
 
 void vkBasalt::aist::In2D::createLayout(DsCounterHolder *counters) {
@@ -73,7 +71,6 @@ void vkBasalt::aist::In2D::createPipeline() {
     VkSpecializationMapEntry specEntries[]{
             {.constantID = constIdx++, .offset=offsetof(Specialization, width), .size=sizeof(Specialization::width)},
             {.constantID = constIdx++, .offset=offsetof(Specialization, height), .size=sizeof(Specialization::height)},
-            {.constantID = constIdx++, .offset=offsetof(Specialization, spatialDivisor), .size=sizeof(Specialization::spatialDivisor)},
             {.constantID = constIdx++, .offset=offsetof(Specialization, channels), .size=sizeof(Specialization::channels)},
     };
     VkSpecializationInfo specInfo{
@@ -181,8 +178,8 @@ void vkBasalt::aist::In2D::appendCommands(VkCommandBuffer commandBuffer, uint32_
     );
     pLogicalDevice->vkd.CmdDispatch(
             commandBuffer,
-            (uint32_t) std::ceil(imageExtent.width / imageSizeProportion),
-            (uint32_t) std::ceil(imageExtent.height / imageSizeProportion),
-            depth
+            1u,
+            1u,
+            specialization.channels
     );
 }

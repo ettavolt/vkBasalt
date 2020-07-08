@@ -147,9 +147,9 @@ void vkBasalt::aist::In2D::appendCommands(VkCommandBuffer commandBuffer, uint32_
     );
     pLogicalDevice->vkd.CmdDispatch(
             commandBuffer,
-            1,
-            1,
-            depth
+            1u,
+            1u,
+            specialization.channels
     );
     pLogicalDevice->vkd.CmdPipelineBarrier(
             commandBuffer,

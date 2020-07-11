@@ -1,19 +1,24 @@
 #include <cmath>
 #include <numeric>
 
-#include "effect_aist.hpp"
-
 #include "buffer.hpp"
 #include "command_buffer.hpp"
 #include "image_view.hpp"
 #include "descriptor_set.hpp"
 #include "util.hpp"
-
-#include "aist/fromimage_layer.hpp"
-#include "aist/in_2d_layer.hpp"
-#include "aist/up_conv_32_3_layer.hpp"
-#include "aist/to_image_layer.hpp"
 #include "memory.hpp"
+
+#include "effect_aist.hpp"
+
+const VkDeviceSize WEIGHT_ELEMENT_SIZE = 4;
+const VkDeviceSize W_STRIDED_LOW_SIZE = 15 * 1 * 10 * WEIGHT_ELEMENT_SIZE;
+const VkDeviceSize W_SHUFFLE_LOW_SIZE = 16 * 15 * WEIGHT_ELEMENT_SIZE;
+const VkDeviceSize W_NORM_LOW_SIZE = 16 * 2 * WEIGHT_ELEMENT_SIZE;
+const VkDeviceSize W_CONV_MID_SIZE = 64 * 1 * 10 * WEIGHT_ELEMENT_SIZE;
+const VkDeviceSize W_SHUFFLE_MID_SIZE = 64 * 64 * WEIGHT_ELEMENT_SIZE;
+const VkDeviceSize W_NORM_MID_SIZE = 64 * 2 * WEIGHT_ELEMENT_SIZE;
+const VkDeviceSize W_SHUFFLE_MID_BIASED_SIZE = (64 * 64 + 64) * WEIGHT_ELEMENT_SIZE;
+const VkDeviceSize W_SHUFFLE_LOW_BIASED_SIZE = (16 * 15 + 15) * WEIGHT_ELEMENT_SIZE;
 
 vkBasalt::AistEffect::AistEffect(
         LogicalDevice *pLogicalDevice,
@@ -28,31 +33,31 @@ vkBasalt::AistEffect::AistEffect(
         imageExtent(imageExtent),
         inputImages(inputImages),
         outputImages(outputImages),
-        pConfig(pConfig) {
+        pConfig(pConfig),
+        shaders(pLogicalDevice),
+        // (width / 2) × (height / 2) × 16 × 2
+        //   spatial|reduction   channels|   | 1) intermediate for split conv, 2) conv/norm target
+        // or
+        // (width / 4) × (height / 4) × 64 × 3
+        //   spatial|reduction   channels|   | 1) identity passthrough, 2) intermediate for split conv, 3) conv/norm target.
+        // w x h x 12 of 32-bit floats.
+        //But we have to align offsets to 256 bytes boundary. Offsets will be at 4, 8.
+        //So, align WxHx4 fp32 chunks.
+        //(But something may spawn the area between them)
+        intermediateChunkAlignedSize(alignTo256Bytes(imageExtent.width * imageExtent.height * 4 * 4)) {
     Logger::debug("in creating AistEffect");
 
     allocateBuffers();
-    Logger::debug("allocated buffers");
+    Logger::debug("AIST: allocated buffers");
 
     inputImageViews = createImageViews(pLogicalDevice, format, inputImages);
-    Logger::debug("created input ImageViews");
+    Logger::debug("AIST: created input ImageViews");
     //Deal with crash during swapchain recreation. Likely, need to wait for active semaphores.
     //relayoutOutputImages();
     outputImageViews = createImageViews(pLogicalDevice, format, outputImages);
-    Logger::debug("created output ImageViews");
+    Logger::debug("AIST: created output ImageViews");
 
-    uint32_t chainCount = inputImages.size();
-
-    layers.push_back(std::unique_ptr<aist::Layer>(new aist::FromImageLayer(pLogicalDevice, imageExtent, chainCount)));
-    layers.push_back(std::unique_ptr<aist::Layer>(new aist::In2D(pLogicalDevice, imageExtent, chainCount, 2, 32)));
-    layers.push_back(std::unique_ptr<aist::Layer>(new aist::UpConv32t3(pLogicalDevice, imageExtent, chainCount)));
-    layers.push_back(std::unique_ptr<aist::Layer>(new aist::ToImageLayer(pLogicalDevice, imageExtent, chainCount)));
-
-    createLayoutAndDescriptorSets();
-
-    for (const auto &layer : layers) {
-        layer->createPipeline();
-    }
+    createDescriptorSets();
 }
 
 void vkBasalt::AistEffect::allocateBuffers() {
@@ -62,9 +67,6 @@ void vkBasalt::AistEffect::allocateBuffers() {
         Logger::err("Can't open aistWeigthsFile!");
     }
     auto fileSize = file.tellg();
-    // Should be:
-    // ((3 × 9 + 3 × 32) + (32 × 9 + 32 × 64)) × 2 + (64 × 9 + 64 × 64) × 2 × 15
-    // 4 - 32-bit float.
     VkDeviceSize weightsSize = fileSize;
     char* weightsHostBuf = new char [fileSize];
     file.seekg(0, std::ios::beg);
@@ -79,10 +81,8 @@ void vkBasalt::AistEffect::allocateBuffers() {
     };
     VkResult result = pLogicalDevice->vkd.CreateBuffer(pLogicalDevice->device, &bufferInfo, nullptr, &weights);
     ASSERT_VULKAN(result)
-    // (width / 2) × (height / 2) × 32 + (width / 4) × (height / 4) × 64
-    //        spatial reduction|    |channels     |more SR    channels|
-    // w x h x 12 of 32-bit floats.
-    VkDeviceSize intermediateSize = aist::Layer::alignTo256Bytes(imageExtent.width * imageExtent.height * 12 * 4);
+    //See constructor comment about this field.
+    VkDeviceSize intermediateSize = intermediateChunkAlignedSize * 3;
     bufferInfo.size = intermediateSize;
     bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     intermediates.resize(inputImages.size());
@@ -257,109 +257,162 @@ void vkBasalt::AistEffect::relayoutOutputImages() {
     Logger::trace("Relayout complete, extra freed");
 }
 
-void vkBasalt::AistEffect::createLayoutAndDescriptorSets() {
-    aist::DsCounterHolder counters{
-            .images = 0,
-            .uniforms = 0,
-            .intermediates = 0,
-    };
-    for (const auto &layer : layers) {
-        layer->createLayout(&counters);
-    }
-
+void vkBasalt::AistEffect::createDescriptorSets() {
+    VkResult result;
     uint32_t chainCount = inputImages.size();
-    descriptorPool = createDescriptorPool(pLogicalDevice, std::vector<VkDescriptorPoolSize>(
+    const auto &poolSizes = std::vector<VkDescriptorPoolSize>(
             {
-                    {.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = counters.images},
-                    {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = counters.uniforms},
-                    {.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = counters.intermediates},
+                    //in&out
+                    {.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = chainCount * 2},
+                    //for image, two halves, three thirds.
+                    {.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = chainCount * 3},
+                    //weights of six sizes
+                    {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .descriptorCount = 8},
             }
-    ));
-    Logger::debug("created descriptorPool");
+    );
+    descriptorPool = createDescriptorPool(pLogicalDevice, poolSizes);
+    Logger::debug("AIST: created descriptorPool");
 
-    for (const auto &layer : layers) {
-        layer->createDescriptorSets(descriptorPool);
+    //Can't join as sets have to be written to different holders.
+    std::vector<VkDescriptorSetLayout> layouts;
+    layouts.insert(layouts.cend(), poolSizes[0].descriptorCount, shaders.imageLayout);
+    layouts.insert(layouts.cend(), poolSizes[1].descriptorCount, shaders.bufferLayout);
+    layouts.insert(layouts.cend(), poolSizes[2].descriptorCount, shaders.weightsLayout);
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .pNext = nullptr,
+            .descriptorPool = descriptorPool,
+    };
+    descriptorSetAllocateInfo.descriptorSetCount = layouts.size();
+    descriptorSetAllocateInfo.pSetLayouts = layouts.data();
+    std::vector<VkDescriptorSet> sets(layouts.size());
+    inputImageDescriptorSets.resize(layouts.size());
+    result = pLogicalDevice->vkd.AllocateDescriptorSets(
+            pLogicalDevice->device,
+            &descriptorSetAllocateInfo,
+            sets.data()
+    );
+    ASSERT_VULKAN(result)
+    auto setsIt1 = sets.cbegin();
+    auto setsIt2 = setsIt1 + chainCount;
+    inputImageDescriptorSets.assign(setsIt1, setsIt2);
+    setsIt1 = setsIt2 + chainCount;
+    outputImageDescriptorSets.assign(setsIt2, setsIt1);
+    setsIt2 = setsIt1 + chainCount;
+    startThirdBufferDescriptorSets.assign(setsIt1, setsIt2);
+    setsIt1 = setsIt2 + chainCount;
+    midThirdBufferDescriptorSets.assign(setsIt2, setsIt1);
+    setsIt2 = setsIt1 + chainCount;
+    endThirdBufferDescriptorSets.assign(setsIt1, setsIt2);
+    wStridedLowDescriptorSet = *(setsIt2++);
+    wShuffleLowDescriptorSet = *(setsIt2++);
+    wNormLowDescriptorSet = *(setsIt2++);
+    wConvMidDescriptorSet = *(setsIt2++);
+    wShuffleMidDescriptorSet = *(setsIt2++);
+    wNormMidDescriptorSet = *(setsIt2++);
+    wShuffleMidBiasedDescriptorSet = *(setsIt2++);
+    wShuffleLowBiasedDescriptorSet = *(setsIt2++);
+    Logger::debug("AIST: after allocating descriptor sets");
+
+    Logger::debug("AIST: before writing descriptor sets");
+    std::vector<VkDescriptorBufferInfo> bufferInfos(8, {
+            .buffer = weights,
+            .offset = 0,
+            .range = 0,
+    });
+    std::vector<VkWriteDescriptorSet> writes(bufferInfos.size(), {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+            .pImageInfo = nullptr,
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr,
+    });
+    for (size_t i = 0; i < bufferInfos.size(); ++i) {
+        writes[i].pBufferInfo = &bufferInfos[i];
     }
-    Logger::debug("after allocating descriptor Sets");
+    bufferInfos[0].range = W_STRIDED_LOW_SIZE;
+    writes[0].dstSet = wStridedLowDescriptorSet;
+    bufferInfos[1].range = W_SHUFFLE_LOW_SIZE;
+    writes[1].dstSet = wShuffleLowDescriptorSet;
+    bufferInfos[2].range = W_CONV_MID_SIZE;
+    writes[2].dstSet = wConvMidDescriptorSet;
+    bufferInfos[3].range = 1;//W_SHUFFLE_MID_SIZE;
+    writes[3].dstSet = wShuffleMidDescriptorSet;
+    bufferInfos[4].range = W_NORM_LOW_SIZE;
+    writes[4].dstSet = wNormLowDescriptorSet;
+    bufferInfos[5].range = W_NORM_MID_SIZE;
+    writes[5].dstSet = wNormMidDescriptorSet;
+    bufferInfos[6].range = 1;//W_SHUFFLE_MID_BIASED_SIZE;
+    writes[6].dstSet = wShuffleMidBiasedDescriptorSet;
+    bufferInfos[7].range = W_SHUFFLE_LOW_BIASED_SIZE;
+    writes[7].dstSet = wShuffleLowBiasedDescriptorSet;
+    pLogicalDevice->vkd.UpdateDescriptorSets(
+            pLogicalDevice->device,
+            writes.size(), writes.data(),
+            0, nullptr
+    );
+    Logger::debug("AIST: weights DSes have been written to");
 
-    // In & Out
     std::vector<VkDescriptorImageInfo> imageInfos(2, {
             .sampler = VK_NULL_HANDLE,
             .imageView = VK_NULL_HANDLE,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
     });
-    std::vector<VkWriteDescriptorSet> writeDescriptorSets(imageInfos.size(), {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = VK_NULL_HANDLE,
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            .pBufferInfo = nullptr,
-            .pTexelBufferView = nullptr,
-    });
-    for (uint32_t i = 0; i < imageInfos.size(); i++) {
-        writeDescriptorSets[i].pImageInfo = &(imageInfos[i]);
-    }
-
-    Logger::debug("before writing descriptor Sets");
-    VkDescriptorBufferInfo intermediateInfo{
-            .buffer = VK_NULL_HANDLE,
-            .offset = 0,
-            .range = 0,
-    };
-    VkWriteDescriptorSet intermediateWrite = writeDescriptorSets[0];
-    intermediateWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    intermediateWrite.dstBinding = 1;
-    intermediateWrite.pImageInfo = nullptr;
-    intermediateWrite.pBufferInfo = &intermediateInfo;
-    VkDescriptorBufferInfo weightsInfo = intermediateInfo;
-    weightsInfo.buffer = weights;
-    VkWriteDescriptorSet weightsWrite = intermediateWrite;
-    weightsWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    weightsWrite.dstBinding = 0;
-    weightsWrite.pBufferInfo = &weightsInfo;
-    auto holder = aist::DsWriterHolder{
-            .inImage = &(writeDescriptorSets[0]),
-            .outImage = &(writeDescriptorSets[1]),
-            .intermediate = &intermediateWrite,
-            .weights = &weightsWrite,
-    };
+    writes.resize(5);
+    writes[0].descriptorType = writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    writes[2].descriptorType = writes[3].descriptorType = writes[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[0].pBufferInfo = writes[1].pBufferInfo = nullptr;
+    writes[0].pImageInfo = &imageInfos[0];
+    writes[1].pImageInfo = &imageInfos[1];
+    bufferInfos[2].range = bufferInfos[3].range = bufferInfos[4].range = intermediateChunkAlignedSize;
+    bufferInfos[2].offset = 0;
+    bufferInfos[3].offset = intermediateChunkAlignedSize;
+    bufferInfos[4].offset = intermediateChunkAlignedSize * 2;
     for (uint32_t chainIdx = 0; chainIdx < chainCount; chainIdx++) {
         imageInfos[0].imageView = inputImageViews[chainIdx];
+        writes[0].dstSet = inputImageDescriptorSets[chainIdx];
         imageInfos[1].imageView = outputImageViews[chainIdx];
-        intermediateInfo.buffer = intermediates[chainIdx];
-        weightsInfo.offset = 0;
-        weightsInfo.range = 0;
-        for (const auto &layer : layers) {
-            layer->writeSets(holder, chainIdx);
-            weightsInfo.offset += weightsInfo.range;
-            weightsInfo.range = 0;
-            Logger::debug("Wrote DS in chain " + std::to_string(chainIdx));
-        }
+        writes[1].dstSet = outputImageDescriptorSets[chainIdx];
+        bufferInfos[4].buffer = bufferInfos[3].buffer = bufferInfos[2].buffer = intermediates[chainIdx];
+        writes[2].dstSet = startThirdBufferDescriptorSets[chainIdx];
+        writes[3].dstSet = midThirdBufferDescriptorSets[chainIdx];
+        writes[4].dstSet = endThirdBufferDescriptorSets[chainIdx];
+        pLogicalDevice->vkd.UpdateDescriptorSets(
+                pLogicalDevice->device,
+                writes.size(),
+                writes.data(),
+                0,
+                nullptr
+        );
+        Logger::debug("AIST: Wrote DSes in chain " + std::to_string(chainIdx));
     }
-    Logger::debug("after writing descriptor Sets");
+    Logger::debug("AIST: after writing descriptor Sets");
 }
 
 void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer) {
-    Logger::debug("applying AistEffect to cb " + convertToString(commandBuffer));
+    Logger::debug("AIST: applying AistEffect to cb " + convertToString(commandBuffer));
     // After shader has run, modify layout of output image again to support present|transfer.
-    VkImageMemoryBarrier outputAfterShaderBarrier;
-    outputAfterShaderBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    outputAfterShaderBarrier.pNext = nullptr;
-    outputAfterShaderBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    outputAfterShaderBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-    outputAfterShaderBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    outputAfterShaderBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    outputAfterShaderBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    outputAfterShaderBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    outputAfterShaderBarrier.image = outputImages[imageIndex];
-    outputAfterShaderBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    outputAfterShaderBarrier.subresourceRange.baseMipLevel = 0;
-    outputAfterShaderBarrier.subresourceRange.levelCount = 1;
-    outputAfterShaderBarrier.subresourceRange.baseArrayLayer = 0;
-    outputAfterShaderBarrier.subresourceRange.layerCount = 1;
+    VkImageMemoryBarrier outputAfterShaderBarrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = outputImages[imageIndex],
+            .subresourceRange = {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+            }
+    };
 
     std::vector<VkImageMemoryBarrier> beforeShaderBarriers(2, outputAfterShaderBarrier);
 
@@ -370,7 +423,8 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
     beforeShaderBarriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
     beforeShaderBarriers[1].image = inputImages[imageIndex];
 
-    // …and convert layout of output image because it was not modified after previous execution of this (same!) buffer.
+    // …and convert layout of output image
+    // because it was not modified after previous execution of this (same!) command buffer.
     //TODO: Convert just before the last layer.
     beforeShaderBarriers[1].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
     beforeShaderBarriers[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -386,9 +440,9 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
             0, nullptr,
             beforeShaderBarriers.size(), beforeShaderBarriers.data()
     );
-    Logger::debug("after the input pipeline barriers");
+    Logger::debug("AIST: after the input pipeline barriers");
 
-    VkBufferMemoryBarrier memoryBarrier{
+    VkBufferMemoryBarrier bufferBarrier{
             .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
             .pNext = nullptr,
             .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
@@ -399,22 +453,10 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
             .offset = 0,
             .size = VK_WHOLE_SIZE,
     };
-    bool addBufferBarrier = false;
-    for (const auto &layer : layers) {
-        if (addBufferBarrier) {
-            pLogicalDevice->vkd.CmdPipelineBarrier(
-                    commandBuffer,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    0,
-                    0, nullptr,
-                    1, &memoryBarrier,
-                    0, nullptr
-            );
-        }
-        layer->appendCommands(commandBuffer, imageIndex, &memoryBarrier);
-        addBufferBarrier = true;
-    }
+
+    dispatchImageTouching(commandBuffer, imageIndex, false);
+    appendBufferBarrier(commandBuffer, &bufferBarrier);
+    dispatchImageTouching(commandBuffer, imageIndex, true);
 
     pLogicalDevice->vkd.CmdPipelineBarrier(
             commandBuffer,
@@ -426,12 +468,62 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
             1, &outputAfterShaderBarrier
     );
 
-    Logger::debug("after the output pipeline barrier");
+    Logger::debug("AIST: after the output pipeline barrier");
+}
+
+void vkBasalt::AistEffect::dispatchImageTouching(VkCommandBuffer commandBuffer, uint32_t chainIdx, bool output) {
+    Logger::debug("AIST: shaders.fromImage.pipeline " + convertToString(shaders.fromImage.pipeline));
+    auto &shader = output ? shaders.toImage : shaders.fromImage;
+    Logger::debug("AIST: shader.pipeline " + convertToString(shader.pipeline));
+    pLogicalDevice->vkd.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, shader.pipeline);
+    VkDescriptorSet sets[]{
+            output ? outputImageDescriptorSets[chainIdx] : inputImageDescriptorSets[chainIdx],
+            startThirdBufferDescriptorSets[chainIdx],
+    };
+    pLogicalDevice->vkd.CmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            shader.layout, 0,
+            std::size(sets), sets,
+            0, nullptr
+    );
+    pLogicalDevice->vkd.CmdPushConstants(
+            commandBuffer,
+            shader.layout,
+            VK_SHADER_STAGE_COMPUTE_BIT, 0,
+            sizeof(VkExtent2D),
+            &imageExtent
+    );
+    pLogicalDevice->vkd.CmdDispatch(
+            commandBuffer,
+            (uint32_t) std::ceil(imageExtent.width / shaders.getImageAccessColumnGroup()),
+            (uint32_t) std::ceil(imageExtent.height / shaders.getImageAccessRowGroup()),
+            1u
+    );
+}
+
+void vkBasalt::AistEffect::appendBufferBarrier(VkCommandBuffer commandBuffer, VkBufferMemoryBarrier *bufferBarrierDto) {
+    pLogicalDevice->vkd.CmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            0, nullptr,
+            1, bufferBarrierDto,
+            0, nullptr
+    );
+}
+
+VkDeviceSize vkBasalt::AistEffect::alignTo256Bytes(VkDeviceSize size) {
+    VkDeviceSize overWholeWeight = size % 256;
+    if (overWholeWeight > 0) {
+        size += 256 - overWholeWeight;
+    }
+    return size;
 }
 
 vkBasalt::AistEffect::~AistEffect() {
     Logger::debug("destroying AistEffect " + convertToString(this));
-    layers.clear();
     pLogicalDevice->vkd.DestroyDescriptorPool(pLogicalDevice->device, descriptorPool, nullptr);
     pLogicalDevice->vkd.DestroyBuffer(pLogicalDevice->device, weights, nullptr);
     for (const auto &buffer : intermediates) {
@@ -443,6 +535,6 @@ vkBasalt::AistEffect::~AistEffect() {
         pLogicalDevice->vkd.DestroyImageView(pLogicalDevice->device, inputImageViews[i], nullptr);
         pLogicalDevice->vkd.DestroyImageView(pLogicalDevice->device, outputImageViews[i], nullptr);
     }
-    Logger::debug("after DestroyImageView");
+    Logger::debug("AIST: after DestroyImageView");
 }
 

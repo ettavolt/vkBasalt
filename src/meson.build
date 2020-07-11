@@ -9,6 +9,7 @@ vkBasalt_src = [
     'descriptor_set.cpp',
     'effect_cas.cpp',
     'effect.cpp',
+    'aist/nn_shaders.cpp',
     'aist/nn_layer.cpp',
     'aist/fromimage_layer.cpp',
     'aist/in_2d_layer.cpp',

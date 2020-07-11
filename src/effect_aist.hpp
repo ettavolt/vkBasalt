@@ -12,7 +12,7 @@
 #include "logical_device.hpp"
 #include "config.hpp"
 #include "effect.hpp"
-#include "aist/nn_layer.h"
+#include "aist/nn_shaders.h"
 
 namespace vkBasalt
 {
@@ -25,8 +25,8 @@ namespace vkBasalt
                    std::vector<VkImage> inputImages,
                    std::vector<VkImage> outputImages,
                    Config*              pConfig);
-        virtual void applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer) override;
-        virtual ~AistEffect();
+        void applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer) override;
+        ~AistEffect() override;
 
     private:
         LogicalDevice*               pLogicalDevice;
@@ -36,17 +36,39 @@ namespace vkBasalt
         std::vector<VkImage>         outputImages;
         Config*                      pConfig;
 
+        //TODO: bind this to pLogicalDevice life
+        aist::NnShaders              shaders;
+
+        const VkDeviceSize           intermediateChunkAlignedSize;
         std::vector<VkImageView>     inputImageViews;
         std::vector<VkImageView>     outputImageViews;
-        VkDeviceMemory               bufferMemory;
-        VkBuffer                     weights;
+        VkDeviceMemory               bufferMemory = VK_NULL_HANDLE;
+        VkBuffer                     weights = VK_NULL_HANDLE;
         std::vector<VkBuffer>        intermediates;
-        std::vector<std::unique_ptr<aist::Layer>> layers;
-        VkDescriptorPool             descriptorPool;
+        VkDescriptorPool             descriptorPool = VK_NULL_HANDLE;
+        VkDescriptorSet              wStridedLowDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet              wShuffleLowDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet              wNormLowDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet              wConvMidDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet              wShuffleMidDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet              wNormMidDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet              wShuffleMidBiasedDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet              wShuffleLowBiasedDescriptorSet = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> inputImageDescriptorSets;
+        std::vector<VkDescriptorSet> outputImageDescriptorSets;
+        std::vector<VkDescriptorSet> startThirdBufferDescriptorSets;
+        std::vector<VkDescriptorSet> midThirdBufferDescriptorSets;
+        std::vector<VkDescriptorSet> endThirdBufferDescriptorSets;
 
         void allocateBuffers();
         void relayoutOutputImages();
-        void createLayoutAndDescriptorSets();
+        void createDescriptorSets();
+
+        void appendBufferBarrier(VkCommandBuffer commandBuffer, VkBufferMemoryBarrier *bufferBarrierDto);
+
+        void dispatchImageTouching(VkCommandBuffer commandBuffer, uint32_t chainIdx, bool output);
+
+        static VkDeviceSize alignTo256Bytes(VkDeviceSize size);
     };
 
 } // namespace vkBasalt

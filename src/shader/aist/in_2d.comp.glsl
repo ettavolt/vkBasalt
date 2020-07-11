@@ -11,11 +11,11 @@ layout(push_constant) uniform PushConsts {
 const uint imageSize = WIDTH * HEIGHT;
 
 layout(std430, set = 0, binding = 0) uniform restrict readonly Weights {
-    //This is effectively scale + bias, but offsets are not calculated with spec constants
+    //This is effectively scale & bias, but offsets are not calculated with spec constants
     //thus we can't have two fields in the struct.
     float weights[CHANNELS * 2];
 };
-//Making this channels first reduces two substages time by 410 μs for vulkanscene sample.
+//Making this channels outer reduces two substages time by 410 μs for vulkanscene sample.
 layout(std430, set = 1, binding = 0) buffer readonly restrict Tensor {
     float inTensor[imageSize * CHANNELS];
 };

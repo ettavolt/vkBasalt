@@ -7,8 +7,8 @@ layout(push_constant) uniform PushConsts {
     uint height;
 };
 
-layout(set = 0, binding = 0, rgba8) uniform restrict readonly image2D inImage;
-layout(set = 1, binding = 0, std430) buffer restrict writeonly OutTensor {
+layout(rgba8, set = 0, binding = 0) uniform restrict readonly image2D inImage;
+layout(std430, set = 1, binding = 0) buffer restrict writeonly OutTensor {
     float outTensor[][3];
 };
 

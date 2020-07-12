@@ -1,7 +1,8 @@
 shader_src = [
     'aist/from_image.comp.glsl',
+    'aist/down_conv_low.comp.glsl',
     'aist/in_2d.comp.glsl',
-    'aist/up_conv_32_3.comp.glsl',
+    'aist/up_conv_low.comp.glsl',
     'aist/to_image.comp.glsl',
     'cas.frag.glsl',
     'deband.frag.glsl',

@@ -8,7 +8,14 @@ namespace vkBasalt::aist {
         VkShaderModule module = VK_NULL_HANDLE;
         VkPipelineLayout layout = VK_NULL_HANDLE;
         VkPipeline pipeline = VK_NULL_HANDLE;
+        const uint32_t scale = 0xFFFFu;
+        const uint32_t depthGlobals = 1u;
     };
+
+    const uint32_t IMAGE_CHANNELS = 3u;
+    const uint32_t LOW_STRIDED_CHANNELS = 15u;
+    const uint32_t LOW_SHUFFLE_CHANNELS = 16u;
+    const uint32_t HIGH_CHANNELS = 64u;
 
     class NnShaders {
     public:
@@ -20,30 +27,22 @@ namespace vkBasalt::aist {
         VkDescriptorSetLayout imageLayout = VK_NULL_HANDLE;
         VkDescriptorSetLayout bufferLayout = VK_NULL_HANDLE;
 
-        NnShader fromImage;
-        NnShader downconvLow;
-        NnShader downconvHigh;
+        NnShader fromImage{.scale = 32u};
+        NnShader downConvLow{.scale = 8u, .depthGlobals = IMAGE_CHANNELS};
+        NnShader downConvHigh;
         NnShader shuffleLow;
         NnShader shuffleHigh;
-        NnShader convMid;
+        NnShader convHigh;
         NnShader in2Dsum;
         NnShader in2Dcoeff;
         NnShader in2Dscale;
         NnShader in2Dfma;
-        NnShader upconvHigh;
-        NnShader upconvLow;
-        NnShader toImage;
-
-        [[nodiscard]] uint32_t getImageAccessColumnGroup() const;
-
-        [[nodiscard]] uint32_t getImageAccessRowGroup() const;
+        NnShader upConvHigh;
+        NnShader upConvLow{.scale = 16u, .depthGlobals = IMAGE_CHANNELS};
+        NnShader toImage{.scale = 32u};
 
     private:
         LogicalDevice *pLogicalDevice;
-
-        uint32_t imageAccessColumnGroup = 32;
-
-        uint32_t imageAccessRowGroup = 32;
 
         void createSetLayouts();
 
@@ -59,7 +58,7 @@ namespace vkBasalt::aist {
 
         void createComputePipelines();
 
-        void createComputePipeline(VkComputePipelineCreateInfo *createInfo, VkPipeline *handle);
+        void createComputePipeline(VkComputePipelineCreateInfo *createInfo, NnShader *shader);
 
         void destroyElements(NnShader *holder);
 

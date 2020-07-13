@@ -33,10 +33,10 @@ namespace vkBasalt::aist {
         NnShader downShuffleLow{.scale = 64u};
         NnShader shuffleHigh;
         NnShader convHigh;
-        NnShader in2Dsum;
-        NnShader in2Dcoeff;
-        NnShader in2Dscale;
-        NnShader in2Dfma;
+        NnShader in2Dsum{.scale = 1024u, .depthGlobals = LOW_SHUFFLE_CHANNELS};
+        NnShader in2Dcoeff{.scale = 1024u, .depthGlobals = LOW_SHUFFLE_CHANNELS};
+        NnShader in2Dscale{.scale = 1024u / LOW_SHUFFLE_CHANNELS, .depthGlobals = 1u};
+        NnShader in2DscaleAndAdd;
         NnShader upConvHigh;
         //Need different spec constants because of different z size.
         //Also, spec-constant guided direction allows inlining it, improving perfomance.
@@ -46,6 +46,8 @@ namespace vkBasalt::aist {
 
     private:
         LogicalDevice *pLogicalDevice;
+        VkPipelineLayout imageBufferWidthHeightLayout = VK_NULL_HANDLE;
+        VkPipelineLayout twoBufferWeightsWidthHeightLayout = VK_NULL_HANDLE;
 
         void createSetLayouts();
 

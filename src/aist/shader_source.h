@@ -12,6 +12,15 @@ namespace vkBasalt::aist::shaderSource {
     const uint32_t shuffle_low[] = {
 #include "aist/shuffle_low.comp.h"
     };
+    const uint32_t in_2d_sum_low[] = {
+#include "aist/in_2d_sum_low.comp.h"
+    };
+    const uint32_t in_2d_coeff_low[] = {
+#include "aist/in_2d_coeff_low.comp.h"
+    };
+    const uint32_t in_2d_scale_low[] = {
+#include "aist/in_2d_scale_low.comp.h"
+    };
     const uint32_t up_conv_low[] = {
 #include "aist/up_conv_low.comp.h"
     };

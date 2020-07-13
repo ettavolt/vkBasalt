@@ -1,8 +1,8 @@
 #version 450
 #extension GL_EXT_scalar_block_layout : require
 
-layout(local_size_x_id = 1, local_size_y_id = 2, local_size_z_id = 3) in;
-layout(constant_id = 3) const uint outMaxCh = 16;
+layout(local_size_x_id = 1, local_size_y = 1, local_size_z_id = 3) in;
+layout(constant_id = 3) const uint outMaxCh = 1;
 layout(push_constant) uniform PushConsts {
     uint width;
     uint height;

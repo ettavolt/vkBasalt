@@ -75,10 +75,19 @@ void vkBasalt::aist::NnShaders::createShaders() {
     shaderCreateInfo.codeSize = sizeof(shaderSource::shuffle_low);
     shaderCreateInfo.pCode = shaderSource::shuffle_low;
     createShader(&shaderCreateInfo, &downShuffleLow.module);
-//    shaderCreateInfo.codeSize = sizeof(shaderSource::up_shuffle_low);
-//    shaderCreateInfo.pCode = shaderSource::up_shuffle_low;
-//    createShader(&shaderCreateInfo, &upShuffleLow.module);
     upShuffleLow.module = downShuffleLow.module;
+
+    shaderCreateInfo.codeSize = sizeof(shaderSource::in_2d_sum_low);
+    shaderCreateInfo.pCode = shaderSource::in_2d_sum_low;
+    createShader(&shaderCreateInfo, &in2Dsum.module);
+
+    shaderCreateInfo.codeSize = sizeof(shaderSource::in_2d_coeff_low);
+    shaderCreateInfo.pCode = shaderSource::in_2d_coeff_low;
+    createShader(&shaderCreateInfo, &in2Dcoeff.module);
+
+    shaderCreateInfo.codeSize = sizeof(shaderSource::in_2d_scale_low);
+    shaderCreateInfo.pCode = shaderSource::in_2d_scale_low;
+    createShader(&shaderCreateInfo, &in2Dscale.module);
 }
 
 void vkBasalt::aist::NnShaders::createShader(VkShaderModuleCreateInfo *createInfo, VkShaderModule *handle) {
@@ -109,21 +118,23 @@ void vkBasalt::aist::NnShaders::createPipelineLayouts() {
         .pPushConstantRanges = &pushConstantRange,
     };
     pipelineLayoutCreateInfo.pSetLayouts = setLayouts.data();
-    //TODO: consider deduplication.
-    //Store same on this, copy pointer to shaders.
-    //Destruct on this, respectively.
-    //Maybe provide a getter…
-    createPipelineLayout(&pipelineLayoutCreateInfo, &fromImage.layout);
-    createPipelineLayout(&pipelineLayoutCreateInfo, &toImage.layout);
+    //Maybe provide a getter on NnShader struct…
+    createPipelineLayout(&pipelineLayoutCreateInfo, &imageBufferWidthHeightLayout);
+    fromImage.layout = imageBufferWidthHeightLayout;
+    toImage.layout = imageBufferWidthHeightLayout;
 
     setLayouts[0] = bufferLayout;
     setLayouts[2] = weightsLayout;
     pipelineLayoutCreateInfo.setLayoutCount = 3;
-    createPipelineLayout(&pipelineLayoutCreateInfo, &downConvLow.layout);
-    createPipelineLayout(&pipelineLayoutCreateInfo, &upConvLow.layout);
-    createPipelineLayout(&pipelineLayoutCreateInfo, &downShuffleLow.layout);
-//    createPipelineLayout(&pipelineLayoutCreateInfo, &upShuffleLow.layout);
-    upShuffleLow.layout = downShuffleLow.layout;
+    createPipelineLayout(&pipelineLayoutCreateInfo, &twoBufferWeightsWidthHeightLayout);
+    downConvLow.layout
+        = upConvLow.layout
+        = downShuffleLow.layout
+        = upShuffleLow.layout
+        = in2Dsum.layout
+        = in2Dcoeff.layout
+        = in2Dscale.layout
+        = twoBufferWeightsWidthHeightLayout;
 }
 
 void vkBasalt::aist::NnShaders::createPipelineLayout(VkPipelineLayoutCreateInfo *createInfo, VkPipelineLayout *handle) {
@@ -171,13 +182,11 @@ void vkBasalt::aist::NnShaders::createComputePipelines() {
     };
     groupSizes.width = groupSizes.height = fromImage.scale;
     createComputePipeline(&computePipelineCreateInfo, &fromImage);
-
     groupSizes.width = groupSizes.height = toImage.scale;
     createComputePipeline(&computePipelineCreateInfo, &toImage);
 
     groupSizes.width = groupSizes.height = upConvLow.scale;
     createComputePipeline(&computePipelineCreateInfo, &upConvLow);
-
     groupSizes.width = groupSizes.height = downConvLow.scale;
     groupSizes.depth = LOW_STRIDED_CHANNELS / downConvLow.depthGlobals;
     createComputePipeline(&computePipelineCreateInfo, &downConvLow);
@@ -189,6 +198,15 @@ void vkBasalt::aist::NnShaders::createComputePipelines() {
     groupSizes.width = upShuffleLow.scale;
     groupSizes.depth = LOW_STRIDED_CHANNELS;
     createComputePipeline(&computePipelineCreateInfo, &upShuffleLow);
+
+    groupSizes.width = in2Dsum.scale;
+    groupSizes.height = LOW_SHUFFLE_CHANNELS;
+    groupSizes.depth = 1u;
+    createComputePipeline(&computePipelineCreateInfo, &in2Dsum);
+    groupSizes.width = in2Dcoeff.scale;
+    createComputePipeline(&computePipelineCreateInfo, &in2Dcoeff);
+    groupSizes.width = in2Dscale.scale;
+    createComputePipeline(&computePipelineCreateInfo, &in2Dscale);
 }
 
 void vkBasalt::aist::NnShaders::createComputePipeline(VkComputePipelineCreateInfo *createInfo, NnShader *shader) {
@@ -206,8 +224,10 @@ void vkBasalt::aist::NnShaders::createComputePipeline(VkComputePipelineCreateInf
 }
 
 vkBasalt::aist::NnShaders::~NnShaders() {
-    //These are just a copy of downShuffleLow.
-    upShuffleLow.layout = VK_NULL_HANDLE;
+    destroyElements(&in2Dscale);
+    destroyElements(&in2Dcoeff);
+    destroyElements(&in2Dsum);
+    //This is just a copy from downShuffleLow.
     upShuffleLow.module = VK_NULL_HANDLE;
     destroyElements(&upShuffleLow);
     destroyElements(&downShuffleLow);
@@ -215,6 +235,12 @@ vkBasalt::aist::NnShaders::~NnShaders() {
     destroyElements(&downConvLow);
     destroyElements(&toImage);
     destroyElements(&fromImage);
+    if (twoBufferWeightsWidthHeightLayout != VK_NULL_HANDLE) {
+        pLogicalDevice->vkd.DestroyPipelineLayout(pLogicalDevice->device, twoBufferWeightsWidthHeightLayout, nullptr);
+    }
+    if (imageBufferWidthHeightLayout != VK_NULL_HANDLE) {
+        pLogicalDevice->vkd.DestroyPipelineLayout(pLogicalDevice->device, imageBufferWidthHeightLayout, nullptr);
+    }
     destroySetLayout(bufferLayout);
     destroySetLayout(imageLayout);
     destroySetLayout(weightsLayout);
@@ -223,9 +249,6 @@ vkBasalt::aist::NnShaders::~NnShaders() {
 void vkBasalt::aist::NnShaders::destroyElements(NnShader *holder) {
     if (holder->pipeline != VK_NULL_HANDLE) {
         pLogicalDevice->vkd.DestroyPipeline(pLogicalDevice->device, holder->pipeline, nullptr);
-    }
-    if (holder->layout != VK_NULL_HANDLE) {
-        pLogicalDevice->vkd.DestroyPipelineLayout(pLogicalDevice->device, holder->layout, nullptr);
     }
     if (holder->module != VK_NULL_HANDLE) {
         pLogicalDevice->vkd.DestroyShaderModule(pLogicalDevice->device, holder->module, nullptr);

@@ -79,14 +79,22 @@ namespace vkBasalt {
             bool up
         );
 
-        static VkDeviceSize alignTo256Bytes(VkDeviceSize size);
-
-        void dispatchShuffleLow(
+        void dispatchLinearLowMidEnd(
             VkCommandBuffer commandBuffer,
             uint32_t chainIdx,
             uint32_t weightsOffset,
-            bool up
+            bool inFromMid,
+            vkBasalt::aist::NnShader &shader
         );
+
+        void dispatchIn2D(
+            VkCommandBuffer commandBuffer,
+            VkBufferMemoryBarrier *bufferBarrierDto,
+            uint32_t chainIdx,
+            uint32_t weightsOffset
+        );
+
+        static VkDeviceSize alignTo256Bytes(VkDeviceSize size);
     };
 
 } // namespace vkBasalt

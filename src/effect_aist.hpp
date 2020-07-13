@@ -80,6 +80,13 @@ namespace vkBasalt {
         );
 
         static VkDeviceSize alignTo256Bytes(VkDeviceSize size);
+
+        void dispatchShuffleLow(
+            VkCommandBuffer commandBuffer,
+            uint32_t chainIdx,
+            uint32_t weightsOffset,
+            bool up
+        );
     };
 
 } // namespace vkBasalt

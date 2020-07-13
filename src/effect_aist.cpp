@@ -14,12 +14,11 @@ namespace vkBasalt {
     const VkDeviceSize WEIGHT_ELEMENT_SIZE = 4;
     const VkDeviceSize W_STRIDED_LOW_SIZE = aist::LOW_STRIDED_CHANNELS * 1 * 10 * WEIGHT_ELEMENT_SIZE;
     const VkDeviceSize
-        W_SHUFFLE_LOW_SIZE = (aist::LOW_SHUFFLE_CHANNELS * aist::LOW_STRIDED_CHANNELS + aist::LOW_SHUFFLE_CHANNELS)
-                             * WEIGHT_ELEMENT_SIZE;
+        W_SHUFFLE_LOW_SIZE = (aist::LOW_SHUFFLE_CHANNELS * (aist::LOW_STRIDED_CHANNELS + 1)) * WEIGHT_ELEMENT_SIZE;
     const VkDeviceSize W_NORM_LOW_SIZE = aist::LOW_SHUFFLE_CHANNELS * 2 * WEIGHT_ELEMENT_SIZE;
     const VkDeviceSize W_CONV_HIGH_SIZE = aist::HIGH_CHANNELS * 1 * 10 * WEIGHT_ELEMENT_SIZE;
     const VkDeviceSize
-        W_SHUFFLE_HIGH_SIZE = (aist::HIGH_CHANNELS * aist::HIGH_CHANNELS + aist::HIGH_CHANNELS) * WEIGHT_ELEMENT_SIZE;
+        W_SHUFFLE_HIGH_SIZE = (aist::HIGH_CHANNELS * (aist::HIGH_CHANNELS + 1)) * WEIGHT_ELEMENT_SIZE;
     const VkDeviceSize W_NORM_HIGH_SIZE = aist::HIGH_CHANNELS * 2 * WEIGHT_ELEMENT_SIZE;
 }
 
@@ -489,6 +488,12 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
     dispatchStridedLow(commandBuffer, imageIndex, weightsOffset, false);
     weightsOffset += alignTo256Bytes(W_STRIDED_LOW_SIZE);
     appendBufferBarrier(commandBuffer, &bufferBarrier);
+    dispatchShuffleLow(commandBuffer, imageIndex, weightsOffset, false);
+    weightsOffset += alignTo256Bytes(W_SHUFFLE_LOW_SIZE);
+    appendBufferBarrier(commandBuffer, &bufferBarrier);
+    dispatchShuffleLow(commandBuffer, imageIndex, weightsOffset, true);
+    weightsOffset += alignTo256Bytes(W_SHUFFLE_LOW_SIZE);
+    appendBufferBarrier(commandBuffer, &bufferBarrier);
     dispatchStridedLow(commandBuffer, imageIndex, weightsOffset, true);
     appendBufferBarrier(commandBuffer, &bufferBarrier);
     dispatchImageTouching(commandBuffer, imageIndex, true);
@@ -566,6 +571,40 @@ void vkBasalt::AistEffect::dispatchStridedLow(
         commandBuffer,
         (uint32_t) std::ceil((float) groupDrivingExtent->width / shader.scale),
         (uint32_t) std::ceil((float) groupDrivingExtent->height / shader.scale),
+        shader.depthGlobals
+    );
+}
+
+void vkBasalt::AistEffect::dispatchShuffleLow(
+    VkCommandBuffer commandBuffer,
+    uint32_t chainIdx,
+    uint32_t weightsOffset,
+    bool up
+) {
+    auto &shader = up ? shaders.upShuffleLow : shaders.downShuffleLow;
+    pLogicalDevice->vkd.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, shader.pipeline);
+    VkDescriptorSet sets[]{
+        up ? midThirdBufferDescriptorSets[chainIdx] : endThirdBufferDescriptorSets[chainIdx],
+        up ? endThirdBufferDescriptorSets[chainIdx] : midThirdBufferDescriptorSets[chainIdx],
+        wShuffleLowDescriptorSet,
+    };
+    pLogicalDevice->vkd.CmdBindDescriptorSets(
+        commandBuffer,
+        VK_PIPELINE_BIND_POINT_COMPUTE,
+        shader.layout,
+        0, std::size(sets), sets,
+        1, &weightsOffset
+    );
+    pLogicalDevice->vkd.CmdPushConstants(
+        commandBuffer, shader.layout,
+        VK_SHADER_STAGE_COMPUTE_BIT, 0,
+        sizeof(VkExtent2D), &imageExtent
+    );
+
+    pLogicalDevice->vkd.CmdDispatch(
+        commandBuffer,
+        (uint32_t) std::ceil((float) lowExtent.width * lowExtent.height / shader.scale),
+        1u,
         shader.depthGlobals
     );
 }

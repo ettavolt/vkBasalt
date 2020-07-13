@@ -71,6 +71,14 @@ void vkBasalt::aist::NnShaders::createShaders() {
     shaderCreateInfo.codeSize = sizeof(shaderSource::up_conv_low);
     shaderCreateInfo.pCode = shaderSource::up_conv_low;
     createShader(&shaderCreateInfo, &upConvLow.module);
+
+    shaderCreateInfo.codeSize = sizeof(shaderSource::shuffle_low);
+    shaderCreateInfo.pCode = shaderSource::shuffle_low;
+    createShader(&shaderCreateInfo, &downShuffleLow.module);
+//    shaderCreateInfo.codeSize = sizeof(shaderSource::up_shuffle_low);
+//    shaderCreateInfo.pCode = shaderSource::up_shuffle_low;
+//    createShader(&shaderCreateInfo, &upShuffleLow.module);
+    upShuffleLow.module = downShuffleLow.module;
 }
 
 void vkBasalt::aist::NnShaders::createShader(VkShaderModuleCreateInfo *createInfo, VkShaderModule *handle) {
@@ -113,6 +121,9 @@ void vkBasalt::aist::NnShaders::createPipelineLayouts() {
     pipelineLayoutCreateInfo.setLayoutCount = 3;
     createPipelineLayout(&pipelineLayoutCreateInfo, &downConvLow.layout);
     createPipelineLayout(&pipelineLayoutCreateInfo, &upConvLow.layout);
+    createPipelineLayout(&pipelineLayoutCreateInfo, &downShuffleLow.layout);
+//    createPipelineLayout(&pipelineLayoutCreateInfo, &upShuffleLow.layout);
+    upShuffleLow.layout = downShuffleLow.layout;
 }
 
 void vkBasalt::aist::NnShaders::createPipelineLayout(VkPipelineLayoutCreateInfo *createInfo, VkPipelineLayout *handle) {
@@ -170,6 +181,14 @@ void vkBasalt::aist::NnShaders::createComputePipelines() {
     groupSizes.width = groupSizes.height = downConvLow.scale;
     groupSizes.depth = LOW_STRIDED_CHANNELS / downConvLow.depthGlobals;
     createComputePipeline(&computePipelineCreateInfo, &downConvLow);
+
+    groupSizes.width = downShuffleLow.scale;
+    groupSizes.height = 1u;
+    groupSizes.depth = LOW_SHUFFLE_CHANNELS;
+    createComputePipeline(&computePipelineCreateInfo, &downShuffleLow);
+    groupSizes.width = upShuffleLow.scale;
+    groupSizes.depth = LOW_STRIDED_CHANNELS;
+    createComputePipeline(&computePipelineCreateInfo, &upShuffleLow);
 }
 
 void vkBasalt::aist::NnShaders::createComputePipeline(VkComputePipelineCreateInfo *createInfo, NnShader *shader) {
@@ -187,6 +206,11 @@ void vkBasalt::aist::NnShaders::createComputePipeline(VkComputePipelineCreateInf
 }
 
 vkBasalt::aist::NnShaders::~NnShaders() {
+    //These are just a copy of downShuffleLow.
+    upShuffleLow.layout = VK_NULL_HANDLE;
+    upShuffleLow.module = VK_NULL_HANDLE;
+    destroyElements(&upShuffleLow);
+    destroyElements(&downShuffleLow);
     destroyElements(&upConvLow);
     destroyElements(&downConvLow);
     destroyElements(&toImage);

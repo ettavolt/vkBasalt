@@ -72,12 +72,9 @@ namespace vkBasalt {
 
         void dispatchImageTouching(VkCommandBuffer commandBuffer, uint32_t chainIdx, bool output);
 
-        void dispatchStridedLow(
-            VkCommandBuffer commandBuffer,
-            uint32_t chainIdx,
-            uint32_t weightsOffset,
-            bool up
-        );
+        void dispatchStridedLow(VkCommandBuffer commandBuffer, uint32_t chainIdx, uint32_t weightsOffset, bool up);
+
+        void dispatchStridedHigh(VkCommandBuffer commandBuffer, uint32_t chainIdx, uint32_t weightsOffset, bool up);
 
         void dispatchLinearLowMidEnd(
             VkCommandBuffer commandBuffer,

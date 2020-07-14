@@ -4,7 +4,7 @@
 layout(local_size_x_id = 3, local_size_y_id = 4, local_size_z_id = 5) in;
 layout(constant_id = 0) const uint OUT_CHANNELS = 1;
 layout(constant_id = 1) const uint IN_CHANNELS = 1;
-layout(constant_id = 2) const uint RE_LU = 0;
+layout(constant_id = 2) const bool RE_LU = false;
 layout(push_constant) uniform PushConsts {
     uint outWidth;
     uint outHeight;
@@ -57,7 +57,7 @@ void main() {
         addFromSource(inOffset, -1, -1, buf);
     }
     const uint outPos = (gl_GlobalInvocationID.x * outHeight + gl_GlobalInvocationID.y) * OUT_CHANNELS + outCh;
-    if (bool(RE_LU)) {
+    if (RE_LU) {
         outTensor[outPos] = max(buf, 0.0);
     } else {
         outTensor[outPos] = buf;

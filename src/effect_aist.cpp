@@ -484,6 +484,7 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
 
     uint32_t weightsOffset = 0u;
     dispatchImageTouching(commandBuffer, imageIndex, false);
+
     appendBufferBarrier(commandBuffer, &bufferBarrier);
     dispatchStridedLow(commandBuffer, imageIndex, weightsOffset, false);
     weightsOffset += alignTo256Bytes(W_STRIDED_LOW_SIZE);
@@ -493,11 +494,22 @@ void vkBasalt::AistEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer comm
     appendBufferBarrier(commandBuffer, &bufferBarrier);
     dispatchIn2D(commandBuffer, &bufferBarrier, imageIndex, weightsOffset);
     weightsOffset += alignTo256Bytes(W_NORM_LOW_SIZE);
+
+    appendBufferBarrier(commandBuffer, &bufferBarrier);
+    dispatchStridedHigh(commandBuffer, imageIndex, weightsOffset, false);
+    weightsOffset += alignTo256Bytes(W_CONV_HIGH_SIZE);
+    appendBufferBarrier(commandBuffer, &bufferBarrier);
+    dispatchStridedHigh(commandBuffer, imageIndex, weightsOffset, true);
+    weightsOffset += alignTo256Bytes(W_CONV_HIGH_SIZE);
+
+
     appendBufferBarrier(commandBuffer, &bufferBarrier);
     dispatchLinearLowMidEnd(commandBuffer, imageIndex, weightsOffset, true, shaders.upShuffleLow);
     weightsOffset += alignTo256Bytes(W_SHUFFLE_LOW_SIZE);
     appendBufferBarrier(commandBuffer, &bufferBarrier);
     dispatchStridedLow(commandBuffer, imageIndex, weightsOffset, true);
+    weightsOffset += alignTo256Bytes(W_STRIDED_LOW_SIZE);//Not actually used, just let it be for code alignment.
+
     appendBufferBarrier(commandBuffer, &bufferBarrier);
     dispatchImageTouching(commandBuffer, imageIndex, true);
 
@@ -578,6 +590,41 @@ void vkBasalt::AistEffect::dispatchStridedLow(
     );
 }
 
+void vkBasalt::AistEffect::dispatchStridedHigh(
+    VkCommandBuffer commandBuffer,
+    uint32_t chainIdx,
+    uint32_t weightsOffset,
+    bool up
+) {
+    auto &shader = up ? shaders.upConvHigh : shaders.downConvHigh;
+    pLogicalDevice->vkd.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, shader.pipeline);
+    VkDescriptorSet sets[]{
+        midThirdBufferDescriptorSets[chainIdx],
+        endThirdBufferDescriptorSets[chainIdx],
+        wConvHighDescriptorSet,
+    };
+    pLogicalDevice->vkd.CmdBindDescriptorSets(
+        commandBuffer,
+        VK_PIPELINE_BIND_POINT_COMPUTE,
+        shader.layout,
+        0, std::size(sets), sets,
+        1, &weightsOffset
+    );
+    pLogicalDevice->vkd.CmdPushConstants(
+        commandBuffer, shader.layout,
+        VK_SHADER_STAGE_COMPUTE_BIT, 0,
+        sizeof(VkExtent2D), &lowExtent
+    );
+
+    auto groupDrivingExtent = up ? &lowExtent : &highExtent;
+    pLogicalDevice->vkd.CmdDispatch(
+        commandBuffer,
+        (uint32_t) std::ceil((float) groupDrivingExtent->width / shader.scale),
+        (uint32_t) std::ceil((float) groupDrivingExtent->height / shader.scale),
+        shader.depthGlobals
+    );
+}
+
 void vkBasalt::AistEffect::dispatchLinearLowMidEnd(
     VkCommandBuffer commandBuffer,
     uint32_t chainIdx,
@@ -635,7 +682,7 @@ void vkBasalt::AistEffect::dispatchIn2D(
     pLogicalDevice->vkd.CmdPushConstants(
         commandBuffer, characteristicShader.layout,
         VK_SHADER_STAGE_COMPUTE_BIT, 0,
-        sizeof(VkExtent2D), &imageExtent
+        sizeof(VkExtent2D), &lowExtent
     );
 
     pLogicalDevice->vkd.CmdDispatch(commandBuffer, 1u, 1u, shaders.in2Dsum.depthGlobals);

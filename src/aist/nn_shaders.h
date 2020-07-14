@@ -29,7 +29,7 @@ namespace vkBasalt::aist {
 
         NnShader fromImage{.scale = 32u};
         NnShader downConvLow{.scale = 8u, .depthGlobals = IMAGE_CHANNELS};
-        NnShader downConvHigh;
+        NnShader downConvHigh{.scale = 2u, .depthGlobals = LOW_SHUFFLE_CHANNELS};
         NnShader downShuffleLow{.scale = 64u};
         NnShader shuffleHigh;
         NnShader convHigh;
@@ -37,9 +37,8 @@ namespace vkBasalt::aist {
         NnShader in2Dcoeff{.scale = 1024u, .depthGlobals = LOW_SHUFFLE_CHANNELS};
         NnShader in2Dscale{.scale = 1024u / LOW_SHUFFLE_CHANNELS, .depthGlobals = 1u};
         NnShader in2DscaleAndAdd;
-        NnShader upConvHigh;
-        //Need different spec constants because of different z size.
-        //Also, spec-constant guided direction allows inlining it, improving perfomance.
+        NnShader upConvHigh{.scale = 4u, .depthGlobals = LOW_SHUFFLE_CHANNELS};
+        //Need different spec constant to specify direction.
         NnShader upShuffleLow{.scale = 64u};
         NnShader upConvLow{.scale = 16u, .depthGlobals = IMAGE_CHANNELS};
         NnShader toImage{.scale = 32u};

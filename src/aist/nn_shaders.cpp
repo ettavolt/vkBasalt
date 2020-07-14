@@ -149,21 +149,44 @@ void vkBasalt::aist::NnShaders::createPipelineLayout(VkPipelineLayoutCreateInfo 
 
 void vkBasalt::aist::NnShaders::createComputePipelines() {
     uint32_t constIdx = 0;
+    VkExtent3D specValues[]{
+        {
+            //Low-side channels
+            .width = 0u,
+            //High-side channels
+            .height = 0u,
+            //Other modifications
+            .depth = 0u,
+        },
+        {
+            .width = 0u,
+            .height = 0u,
+            .depth = 1u,
+        },
+    };
     VkSpecializationMapEntry specEntries[]{
-        //NVidia can't bind compute group size to zeroth contstant
-        {.constantID = constIdx++, .offset = offsetof(VkExtent3D, width), .size = sizeof(VkExtent3D::width)},
         {.constantID = constIdx++, .offset = offsetof(VkExtent3D, width), .size = sizeof(VkExtent3D::width)},
         {.constantID = constIdx++, .offset = offsetof(VkExtent3D, height), .size = sizeof(VkExtent3D::height)},
         {.constantID = constIdx++, .offset = offsetof(VkExtent3D, depth), .size = sizeof(VkExtent3D::depth)},
-    };
-    VkExtent3D groupSizes{
-        .width = 0u,
-        .height = 0u,
-        .depth = 1u,
+        {
+            .constantID = constIdx++,
+            .offset = offsetof(VkExtent3D, width) + sizeof(VkExtent3D),
+            .size = sizeof(VkExtent3D::width)
+        },
+        {
+            .constantID = constIdx++,
+            .offset = offsetof(VkExtent3D, height) + sizeof(VkExtent3D),
+            .size = sizeof(VkExtent3D::height)
+        },
+        {
+            .constantID = constIdx++,
+            .offset = offsetof(VkExtent3D, depth) + sizeof(VkExtent3D),
+            .size = sizeof(VkExtent3D::depth)
+        },
     };
     VkSpecializationInfo specInfo{
         .mapEntryCount = constIdx, .pMapEntries = specEntries,
-        .dataSize = sizeof(groupSizes), .pData = &groupSizes,
+        .dataSize = sizeof(specValues), .pData = &specValues,
     };
     VkComputePipelineCreateInfo computePipelineCreateInfo{
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -180,32 +203,40 @@ void vkBasalt::aist::NnShaders::createComputePipelines() {
         .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = -1,
     };
-    groupSizes.width = groupSizes.height = fromImage.scale;
+    specValues[1].width = specValues[1].height = fromImage.scale;
     createComputePipeline(&computePipelineCreateInfo, &fromImage);
-    groupSizes.width = groupSizes.height = toImage.scale;
+    specValues[1].width = specValues[1].height = toImage.scale;
     createComputePipeline(&computePipelineCreateInfo, &toImage);
 
-    groupSizes.width = groupSizes.height = upConvLow.scale;
+    specValues[0].width = IMAGE_CHANNELS;
+    specValues[0].height = LOW_STRIDED_CHANNELS;
+    specValues[1].width = specValues[1].height = upConvLow.scale;
     createComputePipeline(&computePipelineCreateInfo, &upConvLow);
-    groupSizes.width = groupSizes.height = downConvLow.scale;
-    groupSizes.depth = LOW_STRIDED_CHANNELS / downConvLow.depthGlobals;
+    specValues[1].width = specValues[1].height = downConvLow.scale;
+    specValues[1].depth = LOW_STRIDED_CHANNELS / downConvLow.depthGlobals;
     createComputePipeline(&computePipelineCreateInfo, &downConvLow);
 
-    groupSizes.width = downShuffleLow.scale;
-    groupSizes.height = 1u;
-    groupSizes.depth = LOW_SHUFFLE_CHANNELS;
-    createComputePipeline(&computePipelineCreateInfo, &downShuffleLow);
-    groupSizes.width = upShuffleLow.scale;
-    groupSizes.depth = LOW_STRIDED_CHANNELS;
+    specValues[0].width = LOW_STRIDED_CHANNELS;
+    specValues[0].height = LOW_SHUFFLE_CHANNELS;
+    //Into low side
+    specValues[0].depth = 0xFFFFFFFFu;
+    specValues[1].height = 1u;
+    specValues[1].width = upShuffleLow.scale;
+    specValues[1].depth = LOW_STRIDED_CHANNELS;
     createComputePipeline(&computePipelineCreateInfo, &upShuffleLow);
+    //Into high side
+    specValues[0].depth = 0u;
+    specValues[1].width = downShuffleLow.scale;
+    specValues[1].depth = LOW_SHUFFLE_CHANNELS;
+    createComputePipeline(&computePipelineCreateInfo, &downShuffleLow);
 
-    groupSizes.width = in2Dsum.scale;
-    groupSizes.height = LOW_SHUFFLE_CHANNELS;
-    groupSizes.depth = 1u;
+    specValues[0].width = specValues[0].height = LOW_SHUFFLE_CHANNELS;
+    specValues[1].width = in2Dsum.scale;
+    specValues[1].depth = 1u;
     createComputePipeline(&computePipelineCreateInfo, &in2Dsum);
-    groupSizes.width = in2Dcoeff.scale;
+    specValues[1].width = in2Dcoeff.scale;
     createComputePipeline(&computePipelineCreateInfo, &in2Dcoeff);
-    groupSizes.width = in2Dscale.scale;
+    specValues[1].width = in2Dscale.scale;
     createComputePipeline(&computePipelineCreateInfo, &in2Dscale);
 }
 

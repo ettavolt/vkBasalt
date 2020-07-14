@@ -1,13 +1,13 @@
 #version 450
 #extension GL_EXT_scalar_block_layout : require
 
-layout(local_size_x_id = 1, local_size_y_id = 2, local_size_z_id = 3) in;
+layout(local_size_x_id = 3, local_size_y_id = 4, local_size_z_id = 5) in;
+layout(constant_id = 0) const uint IN_CHANNELS = 1;
+layout(constant_id = 1) const uint OUT_CHANNELS = 1;
 layout(push_constant) uniform PushConsts {
     uint inWidth;
     uint inHeight;
 };
-const uint IN_CHANNELS = 3;
-const uint OUT_CHANNELS = 15;
 layout(std430, set = 0, binding = 0) buffer restrict readonly InTensor {
     float inTensor[];
 };
@@ -15,8 +15,7 @@ layout(std430, set = 1, binding = 0) buffer restrict writeonly OutTensor {
     float outTensor[];
 };
 layout(std430, set = 2, binding = 0) uniform restrict readonly Weights {
-    float convs[OUT_CHANNELS][3 * 3];
-    float biases[OUT_CHANNELS];
+    float weights[OUT_CHANNELS * 10];
 };
 
 void main() {
@@ -31,20 +30,20 @@ void main() {
     const uint dy = min(cy + 1, inHeight - 1) * IN_CHANNELS + inCh;
     cy = cy * IN_CHANNELS + inCh;
 
-    float buf = biases[outCh];
+    float buf = weights[OUT_CHANNELS * 9 + outCh];
 
     uint x = max(cx - 1, 0) * inHeight * IN_CHANNELS;
-    buf = fma(convs[outCh][0], inTensor[x + by], buf);
-    buf = fma(convs[outCh][1], inTensor[x + cy], buf);
-    buf = fma(convs[outCh][2], inTensor[x + dy], buf);
+    buf = fma(weights[outCh * 9 + 0], inTensor[x + by], buf);
+    buf = fma(weights[outCh * 9 + 1], inTensor[x + cy], buf);
+    buf = fma(weights[outCh * 9 + 2], inTensor[x + dy], buf);
     x = cx * inHeight * IN_CHANNELS;
-    buf = fma(convs[outCh][3], inTensor[x + by], buf);
-    buf = fma(convs[outCh][4], inTensor[x + cy], buf);
-    buf = fma(convs[outCh][5], inTensor[x + dy], buf);
+    buf = fma(weights[outCh * 9 + 3], inTensor[x + by], buf);
+    buf = fma(weights[outCh * 9 + 4], inTensor[x + cy], buf);
+    buf = fma(weights[outCh * 9 + 5], inTensor[x + dy], buf);
     x = min(cx + 1, inWidth - 1) * inHeight * IN_CHANNELS;
-    buf = fma(convs[outCh][6], inTensor[x + by], buf);
-    buf = fma(convs[outCh][7], inTensor[x + cy], buf);
-    buf = fma(convs[outCh][8], inTensor[x + dy], buf);
+    buf = fma(weights[outCh * 9 + 6], inTensor[x + by], buf);
+    buf = fma(weights[outCh * 9 + 7], inTensor[x + cy], buf);
+    buf = fma(weights[outCh * 9 + 8], inTensor[x + dy], buf);
     uint outPos = (gl_GlobalInvocationID.x * outHeight + gl_GlobalInvocationID.y) * OUT_CHANNELS + outCh;
     outTensor[outPos] = buf;
 }

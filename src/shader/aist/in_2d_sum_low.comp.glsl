@@ -1,9 +1,9 @@
 #version 450
 #extension GL_EXT_scalar_block_layout : require
 
-layout(local_size_x_id = 1, local_size_y = 1, local_size_z_id = 3) in;
-layout(constant_id = 1) const uint THREADS = 1;
-layout(constant_id = 2) const uint CHANNELS = 1;
+layout(local_size_x_id = 3, local_size_y = 1, local_size_z_id = 5) in;
+layout(constant_id = 0) const uint CHANNELS = 1;
+layout(constant_id = 3) const uint THREADS = 1;
 layout(push_constant) uniform PushConsts {
     uint width;
     uint height;

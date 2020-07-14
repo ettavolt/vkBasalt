@@ -76,12 +76,13 @@ namespace vkBasalt {
 
         void dispatchStridedHigh(VkCommandBuffer commandBuffer, uint32_t chainIdx, uint32_t weightsOffset, bool up);
 
-        void dispatchLinearLowMidEnd(
+        void dispatchShuffleLow(VkCommandBuffer commandBuffer, uint32_t chainIdx, uint32_t weightsOffset, bool up);
+
+        void dispatchShuffleHigh(
             VkCommandBuffer commandBuffer,
             uint32_t chainIdx,
             uint32_t weightsOffset,
-            bool inFromMid,
-            vkBasalt::aist::NnShader &shader
+            bool inFromMid
         );
 
         void dispatchIn2D(

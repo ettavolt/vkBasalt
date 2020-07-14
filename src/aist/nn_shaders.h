@@ -31,7 +31,8 @@ namespace vkBasalt::aist {
         NnShader downConvLow{.scale = 8u, .depthGlobals = IMAGE_CHANNELS};
         NnShader downConvHigh{.scale = 2u, .depthGlobals = LOW_SHUFFLE_CHANNELS};
         NnShader downShuffleLow{.scale = 64u};
-        NnShader shuffleHigh;
+        //We're just transposing the weights for to-low variant
+        NnShader shuffleHigh{.scale = 8u};
         NnShader convHigh;
         NnShader in2Dsum{.scale = 1024u, .depthGlobals = LOW_SHUFFLE_CHANNELS};
         NnShader in2Dcoeff{.scale = 1024u, .depthGlobals = LOW_SHUFFLE_CHANNELS};

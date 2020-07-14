@@ -27,9 +27,10 @@ void main() {
     const uint outCh = gl_GlobalInvocationID.z;
 
     float buf = weights[HIGH_CHANNELS * LOW_CHANNELS + outCh];
+    const uint inOffset = pxPos * inMaxCh;
     for (uint inCh = 0; inCh < inMaxCh; inCh++) {
         const uint wIdx = (TO_LOW ? inCh : outCh) * LOW_CHANNELS + (TO_LOW ? outCh : inCh);
-        buf = fma(inTensor[pxPos * inMaxCh + inCh], weights[wIdx], buf);
+        buf = fma(inTensor[inOffset + inCh], weights[wIdx], buf);
     }
 
     outTensor[pxPos * OUT_CHANNELS + outCh] = buf;

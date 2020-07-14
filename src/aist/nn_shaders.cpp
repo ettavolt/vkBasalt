@@ -77,7 +77,7 @@ void vkBasalt::aist::NnShaders::createShaders() {
     shaderCreateInfo.codeSize = sizeof(shaderSource::shuffle_low);
     shaderCreateInfo.pCode = shaderSource::shuffle_low;
     createShader(&shaderCreateInfo, &downShuffleLow.module);
-    upShuffleLow.module = downShuffleLow.module;
+    shuffleHigh.module = upShuffleLow.module = downShuffleLow.module;
 
     shaderCreateInfo.codeSize = sizeof(shaderSource::in_2d_sum_low);
     shaderCreateInfo.pCode = shaderSource::in_2d_sum_low;
@@ -135,6 +135,7 @@ void vkBasalt::aist::NnShaders::createPipelineLayouts() {
         = upConvHigh.layout
         = downShuffleLow.layout
         = upShuffleLow.layout
+        = shuffleHigh.layout
         = in2Dsum.layout
         = in2Dcoeff.layout
         = in2Dscale.layout
@@ -245,6 +246,11 @@ void vkBasalt::aist::NnShaders::createComputePipelines() {
     specValues[1].width = downShuffleLow.scale;
     specValues[1].depth = LOW_SHUFFLE_CHANNELS;
     createComputePipeline(&computePipelineCreateInfo, &downShuffleLow);
+    specValues[0].width = HIGH_CHANNELS;
+    specValues[0].height = HIGH_CHANNELS;
+    specValues[1].width = shuffleHigh.scale;
+    specValues[1].depth = HIGH_CHANNELS;
+    createComputePipeline(&computePipelineCreateInfo, &shuffleHigh);
 
     specValues[0].width = specValues[0].height = LOW_SHUFFLE_CHANNELS;
     specValues[1].width = in2Dsum.scale;
@@ -277,9 +283,11 @@ vkBasalt::aist::NnShaders::~NnShaders() {
     //These are just copies
     upConvHigh.module = VK_NULL_HANDLE;
     downConvHigh.module = VK_NULL_HANDLE;
+    shuffleHigh.module = VK_NULL_HANDLE;
     upShuffleLow.module = VK_NULL_HANDLE;
     destroyElements(&upConvHigh);
     destroyElements(&downConvHigh);
+    destroyElements(&shuffleHigh);
     destroyElements(&upShuffleLow);
     destroyElements(&downShuffleLow);
     destroyElements(&upConvLow);
